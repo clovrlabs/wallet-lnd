@@ -71,12 +71,12 @@ func (c *ChannelNotifier) Start() error {
 }
 
 // Stop signals the notifier for a graceful shutdown.
-func (c *ChannelNotifier) Stop() {
+func (c *ChannelNotifier) Stop() error {
 	if !atomic.CompareAndSwapUint32(&c.stopped, 0, 1) {
-		return
+		return nil
 	}
 
-	c.ntfnServer.Stop()
+	return c.ntfnServer.Stop()
 }
 
 // SubscribeChannelEvents returns a subscribe.Client that will receive updates
