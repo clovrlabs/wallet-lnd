@@ -1216,17 +1216,38 @@ func (s *server) Started() bool {
 	return atomic.LoadInt32(&s.active) != 0
 }
 
+// cleaner is used to aggregate "cleanup" functions during an operation that
+// starts several subsystems. In case one of the subsystem fails to start
+// and a proper resource cleanup is required, the "run" method achieves this
+// by running all these added "cleanup" functions
+type cleaner []func() error
+
+func (c cleaner) add(cleanup func() error) cleaner {
+	return append(c, cleanup)
+}
+
+func (c cleaner) run() {
+	for _, cleanup := range c {
+		if err := cleanup(); err != nil {
+			srvrLog.Infof("Cleanup failed: %v", err)
+		}
+	}
+}
+
 // Start starts the main daemon server, all requested listeners, and any helper
 // goroutines.
 // NOTE: This function is safe for concurrent access.
 func (s *server) Start() error {
 	var startErr error
+	cleanup := cleaner{}
+
 	s.start.Do(func() {
 		if s.torController != nil {
 			if err := s.initTorController(); err != nil {
 				startErr = err
 				return
 			}
+			cleanup = cleanup.add(s.torController.Stop)
 		}
 
 		if s.natTraversal != nil {
@@ -1243,76 +1264,111 @@ func (s *server) Start() error {
 			startErr = err
 			return
 		}
+		cleanup = cleanup.add(s.sigPool.Stop)
+
 		if err := s.writePool.Start(); err != nil {
 			startErr = err
 			return
 		}
+		cleanup = cleanup.add(s.writePool.Stop)
+
 		if err := s.readPool.Start(); err != nil {
 			startErr = err
 			return
 		}
+		cleanup = cleanup.add(s.readPool.Stop)
+
 		if err := s.cc.chainNotifier.Start(); err != nil {
 			startErr = err
 			return
 		}
+		cleanup = cleanup.add(s.cc.chainNotifier.Stop)
+
 		if err := s.channelNotifier.Start(); err != nil {
 			startErr = err
 			return
 		}
+		cleanup = cleanup.add(s.channelNotifier.Stop)
+
 		if err := s.peerNotifier.Start(); err != nil {
 			startErr = err
 			return
 		}
+		cleanup = cleanup.add(s.peerNotifier.Stop)
+
 		if err := s.sphinx.Start(); err != nil {
 			startErr = err
 			return
 		}
+		cleanup = cleanup.add(s.sphinx.Stop)
+
 		if s.towerClient != nil {
 			if err := s.towerClient.Start(); err != nil {
 				startErr = err
 				return
 			}
-		}
+			cleanup = cleanup.add(s.towerClient.Stop)
+		}		
+
 		if err := s.htlcSwitch.Start(); err != nil {
 			startErr = err
 			return
 		}
+		cleanup = cleanup.add(s.htlcSwitch.Stop)
+
 		if err := s.sweeper.Start(); err != nil {
 			startErr = err
 			return
 		}
+		cleanup = cleanup.add(s.sweeper.Stop)
+
 		if err := s.utxoNursery.Start(); err != nil {
 			startErr = err
 			return
 		}
+		cleanup = cleanup.add(s.utxoNursery.Stop)
+
 		if err := s.chainArb.Start(); err != nil {
 			startErr = err
 			return
 		}
+		cleanup = cleanup.add(s.chainArb.Stop)
+
 		if err := s.breachArbiter.Start(); err != nil {
 			startErr = err
 			return
 		}
+		cleanup = cleanup.add(s.breachArbiter.Stop)
+
 		if err := s.authGossiper.Start(); err != nil {
 			startErr = err
 			return
 		}
+		cleanup = cleanup.add(s.authGossiper.Stop)
+
 		if err := s.chanRouter.Start(); err != nil {
 			startErr = err
 			return
 		}
+		cleanup = cleanup.add(s.chanRouter.Stop)
+
 		if err := s.fundingMgr.Start(); err != nil {
 			startErr = err
 			return
 		}
+		cleanup = cleanup.add(s.fundingMgr.Stop)
+
 		if err := s.invoices.Start(); err != nil {
 			startErr = err
 			return
 		}
+		cleanup = cleanup.add(s.invoices.Stop)
+
 		if err := s.chanStatusMgr.Start(); err != nil {
 			startErr = err
 			return
 		}
+		cleanup = cleanup.add(s.chanStatusMgr.Stop)
 
 		if err := s.chanEventStore.Start(); err != nil {
 			startErr = err
@@ -1355,8 +1411,13 @@ func (s *server) Start() error {
 			startErr = err
 			return
 		}
+		cleanup = cleanup.add(s.chanSubSwapper.Stop)
 
 		s.connMgr.Start()
+		cleanup = cleanup.add(func() error {
+			s.connMgr.Stop()
+			return nil
+		})
 
 		// With all the relevant sub-systems started, we'll now attempt
 		// to establish persistent connections to our direct channel
@@ -1397,6 +1458,9 @@ func (s *server) Start() error {
 		atomic.StoreInt32(&s.active, 1)
 	})
 
+	if startErr != nil {
+		cleanup.run()
+	}
 	return startErr
 }
 
