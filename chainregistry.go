@@ -164,7 +164,7 @@ type chainControl struct {
 func newChainControlFromConfig(cfg *Config, chanDB *channeldb.DB,
 	privateWalletPw, publicWalletPw []byte, birthday time.Time,
 	recoveryWindow uint32, wallet *wallet.Wallet,
-	neutrinoCS *neutrino.ChainService) (*chainControl, error) {
+	neutrinoCS *neutrino.ChainService) (*chainControl, func(), error) {
 
 	// Set the RPC config from the "home" chain. Multi-chain isn't yet
 	// active, so we'll restrict usage to a particular chain for now.
@@ -202,7 +202,7 @@ func newChainControlFromConfig(cfg *Config, chanDB *channeldb.DB,
 			defaultLitecoinStaticFeePerKW, 0,
 		)
 	default:
-		return nil, fmt.Errorf("default routing policy for chain %v is "+
+		return nil, nil, fmt.Errorf("Default routing policy for chain %v is "+
 			"unknown", cfg.registeredChains.PrimaryChain())
 	}
 
@@ -222,7 +222,7 @@ func newChainControlFromConfig(cfg *Config, chanDB *channeldb.DB,
 	// Initialize the height hint cache within the chain directory.
 	hintCache, err := chainntnfs.NewHeightHintCache(chanDB)
 	if err != nil {
-		return nil, fmt.Errorf("unable to initialize height hint "+
+		return nil, nil, fmt.Errorf("unable to initialize height hint "+
 			"cache: %v", err)
 	}
 
@@ -239,7 +239,7 @@ func newChainControlFromConfig(cfg *Config, chanDB *channeldb.DB,
 		)
 		cc.chainView, err = chainview.NewCfFilteredChainView(neutrinoCS)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		// If the user provided an API for fee estimation, activate it now.
@@ -254,7 +254,7 @@ func newChainControlFromConfig(cfg *Config, chanDB *channeldb.DB,
 			)
 
 			if err := estimator.Start(); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			cc.feeEstimator = estimator
 		}
@@ -286,7 +286,7 @@ func newChainControlFromConfig(cfg *Config, chanDB *channeldb.DB,
 			// this back to the btcwallet/bitcoind port.
 			rpcPort, err := strconv.Atoi(activeNetParams.rpcPort)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			rpcPort -= 2
 			bitcoindHost = fmt.Sprintf("%v:%d",
@@ -318,11 +318,11 @@ func newChainControlFromConfig(cfg *Config, chanDB *channeldb.DB,
 			5*time.Second,
 		)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		if err := bitcoindConn.Start(); err != nil {
-			return nil, fmt.Errorf("unable to connect to bitcoind: "+
+			return nil, nil, fmt.Errorf("unable to connect to bitcoind: "+
 				"%v", err)
 		}
 
@@ -357,10 +357,10 @@ func newChainControlFromConfig(cfg *Config, chanDB *channeldb.DB,
 				fallBackFeeRate.FeePerKWeight(),
 			)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			if err := cc.feeEstimator.Start(); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		} else if cfg.Litecoin.Active && !cfg.Litecoin.RegTest {
 			ltndLog.Infof("Initializing litecoind backed fee estimator in "+
@@ -376,10 +376,10 @@ func newChainControlFromConfig(cfg *Config, chanDB *channeldb.DB,
 				fallBackFeeRate.FeePerKWeight(),
 			)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			if err := cc.feeEstimator.Start(); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 	case "btcd", "ltcd":
@@ -400,19 +400,19 @@ func newChainControlFromConfig(cfg *Config, chanDB *channeldb.DB,
 		if btcdMode.RawRPCCert != "" {
 			rpcCert, err = hex.DecodeString(btcdMode.RawRPCCert)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		} else {
 			certFile, err := os.Open(btcdMode.RPCCert)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			rpcCert, err = ioutil.ReadAll(certFile)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			if err := certFile.Close(); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 
@@ -444,7 +444,7 @@ func newChainControlFromConfig(cfg *Config, chanDB *channeldb.DB,
 			rpcConfig, activeNetParams.Params, hintCache, hintCache,
 		)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		// Finally, we'll create an instance of the default chain view to be
@@ -452,7 +452,7 @@ func newChainControlFromConfig(cfg *Config, chanDB *channeldb.DB,
 		cc.chainView, err = chainview.NewBtcdFilteredChainView(*rpcConfig)
 		if err != nil {
 			srvrLog.Errorf("unable to create chain view: %v", err)
-			return nil, err
+			return nil, nil, err
 		}
 
 		// Create a special websockets rpc client for btcd which will be used
@@ -460,7 +460,7 @@ func newChainControlFromConfig(cfg *Config, chanDB *channeldb.DB,
 		chainRPC, err := chain.NewRPCClient(activeNetParams.Params, btcdHost,
 			btcdUser, btcdPass, rpcCert, false, 20)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		walletConfig.ChainSource = chainRPC
@@ -481,21 +481,21 @@ func newChainControlFromConfig(cfg *Config, chanDB *channeldb.DB,
 				*rpcConfig, fallBackFeeRate.FeePerKWeight(),
 			)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			if err := cc.feeEstimator.Start(); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 	default:
-		return nil, fmt.Errorf("unknown node type: %s",
+		return nil, nil, fmt.Errorf("unknown node type: %s",
 			homeChainConfig.Node)
 	}
 
 	wc, err := btcwallet.New(*walletConfig)
 	if err != nil {
 		fmt.Printf("unable to create wallet controller: %v\n", err)
-		return nil, err
+		return nil, nil, err
 	}
 
 	cc.msgSigner = wc
@@ -530,18 +530,29 @@ func newChainControlFromConfig(cfg *Config, chanDB *channeldb.DB,
 	lnWallet, err := lnwallet.NewLightningWallet(walletCfg)
 	if err != nil {
 		fmt.Printf("unable to create wallet: %v\n", err)
-		return nil, err
+		return nil, nil, err
 	}
 	if err := lnWallet.Startup(); err != nil {
 		fmt.Printf("unable to start wallet: %v\n", err)
-		return nil, err
+		return nil, nil, err
 	}
 
 	ltndLog.Info("LightningWallet opened")
 
 	cc.wallet = lnWallet
 
-	return cc, nil
+	ccCleanup := func() {
+		if err := cc.wallet.Shutdown(); err != nil {
+			ltndLog.Errorf("Failed to shut down wallet: %v", err)
+		}
+		if err := cc.feeEstimator.Stop(); err != nil {
+			ltndLog.Errorf("Failed to stop feeEstimator: %v", err)
+		}
+		if err := cc.chainView.Stop(); err != nil {
+			ltndLog.Errorf("Failed to stop chainView: %v", err)
+		}
+	}
+	return cc, ccCleanup, nil
 }
 
 var (
