@@ -1123,10 +1123,13 @@ func (s *server) Started() bool {
 // by running all these added "cleanup" functions
 type cleaner []func() error
 
+// add is used to add a cleanup function to be called when
+// the run function is executed
 func (c cleaner) add(cleanup func() error) cleaner {
 	return append(c, cleanup)
 }
 
+// run is used to run all the previousely added cleanup functions
 func (c cleaner) run() {
 	for _, cleanup := range c {
 		if err := cleanup(); err != nil {
@@ -1140,6 +1143,10 @@ func (c cleaner) run() {
 // NOTE: This function is safe for concurrent access.
 func (s *server) Start() error {
 	var startErr error
+
+	// If one sub system fails to start, the following code ensures that the
+	// previous started ones are stopped. It also ensures a proper wallet
+	// shutdown which is important for releasing its resources (boltdb, etc...)
 	cleanup := cleaner{}
 
 	s.start.Do(func() {
@@ -1380,10 +1387,7 @@ func (s *server) Stop() error {
 		s.chainArb.Stop()
 		s.sweeper.Stop()
 		s.channelNotifier.Stop()
-		s.cc.wallet.Shutdown()
-		s.cc.chainView.Stop()
 		s.connMgr.Stop()
-		s.cc.feeEstimator.Stop()
 		s.invoices.Stop()
 		s.fundingMgr.Stop()
 		s.chanSubSwapper.Stop()
