@@ -375,7 +375,7 @@ func Main(lisCfg ListenerCfg) error {
 	// With the information parsed from the configuration, create valid
 	// instances of the pertinent interfaces required to operate the
 	// Lightning Network Daemon.
-	activeChainControl, err := newChainControlFromConfig(
+	activeChainControl, cleanup, err := newChainControlFromConfig(
 		cfg, chanDB, privateWalletPw, publicWalletPw,
 		walletInitParams.Birthday, walletInitParams.RecoveryWindow,
 		walletInitParams.Wallet, neutrinoCS,
@@ -385,6 +385,7 @@ func Main(lisCfg ListenerCfg) error {
 		ltndLog.Error(err)
 		return err
 	}
+	defer cleanup()
 
 	// Finally before we start the server, we'll register the "holy
 	// trinity" of interface for our current "home chain" with the active
