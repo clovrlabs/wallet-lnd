@@ -15,6 +15,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math/big"
 	"net"
@@ -112,10 +113,25 @@ type ListenerCfg struct {
 // options specifying TLS.
 type rpcListeners func() ([]net.Listener, func(), []grpc.ServerOption, error)
 
+/*
+Dependencies is used when LND is running inside another process as library.
+The caller then can use this interface to "inject" his own dependencies instead
+of letting LND creates them. It is usefull for example in logging, chain service, or
+any other dependency that is used outside LND and needs to be shared.
+*/
+type Dependencies interface {
+	ReadyChan() chan interface{}
+	LogPipeWriter() *io.PipeWriter
+	ChainService() *neutrino.ChainService
+}
+
 // Main is the true entry point for lnd. This function is required since defers
 // created in the top-level scope of a main method aren't executed if os.Exit()
 // is called.
-func Main(lisCfg ListenerCfg) error {
+func Main(lisCfg ListenerCfg, deps Dependencies) error {
+	readyChan := deps.ReadyChan()
+	logWriter.RotatorPipe = deps.LogPipeWriter()
+
 	// Load the configuration, and parse any command line options. This
 	// function will also set up logging properly.
 	loadedConfig, err := loadConfig()
@@ -236,17 +252,22 @@ func Main(lisCfg ListenerCfg) error {
 	}
 	var neutrinoCS *neutrino.ChainService
 	if mainChain.Node == "neutrino" {
-		neutrinoBackend, neutrinoCleanUp, err := initNeutrinoBackend(
-			mainChain.ChainDir,
-		)
-		if err != nil {
-			err := fmt.Errorf("Unable to initialize neutrino "+
-				"backend: %v", err)
-			ltndLog.Error(err)
-			return err
+		if deps != nil {
+			neutrinoCS = deps.ChainService()
 		}
-		defer neutrinoCleanUp()
-		neutrinoCS = neutrinoBackend
+		if neutrinoCS == nil {
+			neutrinoBackend, neutrinoCleanUp, err := initNeutrinoBackend(
+				mainChain.ChainDir,
+			)
+			if err != nil {
+				err := fmt.Errorf("Unable to initialize neutrino "+
+					"backend: %v", err)
+				ltndLog.Error(err)
+				return err
+			}
+			defer neutrinoCleanUp()
+			neutrinoCS = neutrinoBackend
+		}
 	}
 
 	var (
@@ -564,6 +585,10 @@ func Main(lisCfg ListenerCfg) error {
 		return err
 	}
 	defer rpcServer.Stop()
+
+	if readyChan != nil {
+		readyChan <- struct{}{}
+	}
 
 	// If we're not in regtest or simnet mode, We'll wait until we're fully
 	// synced to continue the start up of the remainder of the daemon. This
