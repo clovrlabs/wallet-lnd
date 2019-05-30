@@ -188,6 +188,11 @@ type rpcListeners func() ([]*ListenerWithSignal, func(), error)
 // This function starts all main system components then blocks until a signal
 // is received on the shutdownChan at which point everything is shut down again.
 func Main(cfg *Config, lisCfg ListenerCfg, shutdownChan <-chan struct{}) error {
+	//Start the signal that is responsible for shutdown
+	if err := signal.Intercept(); err != nil {
+		ltndLog.Errorf("failed to start signal %v", err)
+		return err
+	}
 	defer func() {
 		ltndLog.Info("Shutdown complete")
 		err := cfg.LogWriter.Close()
