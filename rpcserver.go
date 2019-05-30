@@ -14,6 +14,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"net"
 
 	"github.com/lightningnetwork/lnd/lnrpc/routerrpc"
 	"github.com/lightningnetwork/lnd/routing/route"
@@ -53,6 +54,7 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"gopkg.in/macaroon-bakery.v2/bakery"
+	"google.golang.org/grpc/test/bufconn"
 )
 
 const (
@@ -67,6 +69,9 @@ const (
 )
 
 var (
+	//MemoryRPCListener is used to enable in memory grpc API usage
+	memoryRPCListener *bufconn.Listener	
+	
 	zeroHash [32]byte
 
 	// maxPaymentMSat is the maximum allowed payment currently permitted as
@@ -615,6 +620,19 @@ func (r *rpcServer) Start() error {
 		}()
 	}
 
+	if cfg.RPCMemListen {
+		memoryRPCListener = bufconn.Listen(100)
+		
+		r.listenerCleanUp = append(r.listenerCleanUp, func() {
+			memoryRPCListener.Close()
+		})
+
+		go func() {
+			rpcsLog.Infof("RPC server listening on %s", memoryRPCListener.Addr())
+			r.grpcServer.Serve(memoryRPCListener)
+		}()		
+	}
+
 	// Finally, start the REST proxy for our gRPC server above. We'll ensure
 	// we direct LND to connect to its loopback address rather than a
 	// wildcard to prevent certificate issues when accessing the proxy
@@ -685,6 +703,14 @@ func (r *rpcServer) Stop() error {
 	}
 
 	return nil
+}
+
+//MemDial returns a net.Conn for in-memory RPC
+func MemDial() (net.Conn, error) {	
+	if memoryRPCListener == nil {
+		return nil, errors.New("Memory RPC is not configured")
+	}
+	return memoryRPCListener.Dial()
 }
 
 // addrPairsToOutputs converts a map describing a set of outputs to be created,
