@@ -58,6 +58,10 @@ replace github.com/lightningnetwork/lnd/ticker => ./ticker
 
 replace github.com/lightningnetwork/lnd/queue => ./queue
 
+<<<<<<< HEAD
 replace git.schwanenlied.me/yawning/bsaes.git => github.com/Yawning/bsaes v0.0.0-20180720073208-c0276d75487e
 
 go 1.12
+=======
+replace github.com/btcsuite/btcwallet v0.0.0-20190524003533-2c05240dff28 => github.com/breez/btcwallet v0.0.0-20190528064315-94c4029981be
+>>>>>>> Add submarine swap feature and subrpc server
