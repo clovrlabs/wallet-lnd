@@ -208,14 +208,7 @@ func (b *BtcWallet) ComputeInputScript(tx *wire.MsgTx,
 		return nil, err
 	}
 
-	var pka waddrmgr.ManagedPubKeyAddress
-	//pka := walletAddr.(waddrmgr.ManagedPubKeyAddress)
-	switch v := walletAddr.(type) {
-	case waddrmgr.ManagedPubKeyAddress:
-		pka = v
-	default:
-		return nil, nil
-	}
+	pka := walletAddr.(waddrmgr.ManagedPubKeyAddress)
 	privKey, err := pka.PrivKey()
 	if err != nil {
 		return nil, err
