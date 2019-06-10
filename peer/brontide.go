@@ -17,6 +17,7 @@ import (
 	"github.com/btcsuite/btcd/wire"
 	"github.com/davecgh/go-spew/spew"
 
+	"github.com/lightningnetwork/lnd/backupnotifier"
 	"github.com/lightningnetwork/lnd/buffer"
 	"github.com/lightningnetwork/lnd/chainntnfs"
 	"github.com/lightningnetwork/lnd/channeldb"
@@ -247,6 +248,8 @@ type Config struct {
 
 	// HtlcNotifier is used when creating a ChannelLink.
 	HtlcNotifier *htlcswitch.HtlcNotifier
+
+	BackupNotifier *backupnotifier.BackupNotifier
 
 	// TowerClient is used by legacy channels to backup revoked states.
 	TowerClient wtclient.Client
@@ -792,20 +795,23 @@ func (p *Brontide) addLink(chanPoint *wire.OutPoint,
 	}
 
 	linkCfg := htlcswitch.ChannelLinkConfig{
-		Peer:                    p,
-		DecodeHopIterators:      p.cfg.Sphinx.DecodeHopIterators,
-		ExtractErrorEncrypter:   p.cfg.Sphinx.ExtractErrorEncrypter,
-		FetchLastChannelUpdate:  p.cfg.FetchLastChanUpdate,
-		HodlMask:                p.cfg.Hodl.Mask(),
-		Registry:                p.cfg.Invoices,
-		Switch:                  p.cfg.Switch,
-		Circuits:                p.cfg.Switch.CircuitModifier(),
-		ForwardPackets:          p.cfg.InterceptSwitch.ForwardPackets,
-		FwrdingPolicy:           *forwardingPolicy,
-		FeeEstimator:            p.cfg.FeeEstimator,
-		PreimageCache:           p.cfg.WitnessBeacon,
-		ChainEvents:             chainEvents,
-		UpdateContractSignals:   updateContractSignals,
+		Peer:                   p,
+		DecodeHopIterators:     p.cfg.Sphinx.DecodeHopIterators,
+		ExtractErrorEncrypter:  p.cfg.Sphinx.ExtractErrorEncrypter,
+		FetchLastChannelUpdate: p.cfg.FetchLastChanUpdate,
+		HodlMask:               p.cfg.Hodl.Mask(),
+		Registry:               p.cfg.Invoices,
+		Switch:                 p.cfg.Switch,
+		Circuits:               p.cfg.Switch.CircuitModifier(),
+		ForwardPackets:         p.cfg.InterceptSwitch.ForwardPackets,
+		FwrdingPolicy:          *forwardingPolicy,
+		FeeEstimator:           p.cfg.FeeEstimator,
+		PreimageCache:          p.cfg.WitnessBeacon,
+		ChainEvents:            chainEvents,
+		UpdateContractSignals:  updateContractSignals,
+		OnCommitmentRevoked: func() {
+			p.cfg.BackupNotifier.NotifyBackupEvent()
+		},
 		OnChannelFailure:        onChannelFailure,
 		SyncStates:              syncStates,
 		BatchTicker:             ticker.New(50 * time.Millisecond),
