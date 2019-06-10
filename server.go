@@ -55,6 +55,7 @@ import (
 	"github.com/lightningnetwork/lnd/watchtower/wtdb"
 	"github.com/lightningnetwork/lnd/watchtower/wtpolicy"
 	"github.com/lightningnetwork/lnd/zpay32"
+	"github.com/lightningnetwork/lnd/backupnotifier"
 )
 
 const (
@@ -236,6 +237,8 @@ type server struct {
 	// channelNotifier to be notified of newly opened and closed channels.
 	chanSubSwapper *chanbackup.SubSwapper
 
+	backupNotifier *backupnotifier.BackupNotifier
+
 	quit chan struct{}
 
 	wg sync.WaitGroup
@@ -369,6 +372,8 @@ func newServer(listenAddrs []net.Addr, chanDB *channeldb.DB,
 		// TODO(roasbeef): derive proper onion key based on rotation
 		// schedule
 		sphinx: htlcswitch.NewOnionProcessor(sphinxRouter),
+		
+		backupNotifier: backupnotifier.NewBackupNotifier(),
 
 		persistentPeers:         make(map[string]struct{}),
 		persistentPeersBackoff:  make(map[string]time.Duration),
@@ -1160,6 +1165,10 @@ func (s *server) Start() error {
 			startErr = err
 			return
 		}
+		if err := s.backupNotifier.Start(); err != nil {
+			startErr = err
+			return
+		}
 		if err := s.sphinx.Start(); err != nil {
 			startErr = err
 			return
@@ -1311,6 +1320,7 @@ func (s *server) Stop() error {
 		s.cc.chainNotifier.Stop()
 		s.chanRouter.Stop()
 		s.htlcSwitch.Stop()
+		s.backupNotifier.Stop()
 		s.sphinx.Stop()
 		s.utxoNursery.Stop()
 		s.breachArbiter.Stop()
