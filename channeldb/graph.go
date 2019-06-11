@@ -621,13 +621,15 @@ func (c *ChannelGraph) addChannelEdge(tx *bbolt.Tx, edge *ChannelEdgeInfo) error
 // it is not found, then the zombie index is checked and its result is returned
 // as the second boolean.
 func (c *ChannelGraph) HasChannelEdge(
-	chanID uint64) (time.Time, time.Time, bool, bool, error) {
+	chanID uint64) (time.Time, time.Time, bool, bool, bool, bool, error) {
 
 	var (
-		upd1Time time.Time
-		upd2Time time.Time
-		exists   bool
-		isZombie bool
+		upd1Time     time.Time
+		upd2Time     time.Time
+		upd1Disabled bool
+		upd2Disabled bool
+		exists       bool
+		isZombie     bool
 	)
 
 	// We'll query the cache with the shared lock held to allow multiple
@@ -637,8 +639,10 @@ func (c *ChannelGraph) HasChannelEdge(
 		c.cacheMu.RUnlock()
 		upd1Time = time.Unix(entry.upd1Time, 0)
 		upd2Time = time.Unix(entry.upd2Time, 0)
+		upd1Disabled = entry.upd1Disabled
+		upd2Disabled = entry.upd2Disabled
 		exists, isZombie = entry.flags.unpack()
-		return upd1Time, upd2Time, exists, isZombie, nil
+		return upd1Time, upd2Time, upd1Disabled, upd2Disabled, exists, isZombie, nil
 	}
 	c.cacheMu.RUnlock()
 
@@ -651,8 +655,10 @@ func (c *ChannelGraph) HasChannelEdge(
 	if entry, ok := c.rejectCache.get(chanID); ok {
 		upd1Time = time.Unix(entry.upd1Time, 0)
 		upd2Time = time.Unix(entry.upd2Time, 0)
+		upd1Disabled = entry.upd1Disabled
+		upd2Disabled = entry.upd2Disabled
 		exists, isZombie = entry.flags.unpack()
-		return upd1Time, upd2Time, exists, isZombie, nil
+		return upd1Time, upd2Time, upd1Disabled, upd2Disabled, exists, isZombie, nil
 	}
 
 	if err := c.db.View(func(tx *bbolt.Tx) error {
@@ -682,8 +688,8 @@ func (c *ChannelGraph) HasChannelEdge(
 			return nil
 		}
 
-		exists = true
 		isZombie = false
+		exists = true
 
 		// If the channel has been found in the graph, then retrieve
 		// the edges itself so we can return the last updated
@@ -703,23 +709,27 @@ func (c *ChannelGraph) HasChannelEdge(
 		// update time if the edge was found in the database.
 		if e1 != nil {
 			upd1Time = e1.LastUpdate
+			upd1Disabled = e1.IsDisabled()
 		}
 		if e2 != nil {
 			upd2Time = e2.LastUpdate
+			upd2Disabled = e2.IsDisabled()
 		}
 
 		return nil
 	}); err != nil {
-		return time.Time{}, time.Time{}, exists, isZombie, err
+		return time.Time{}, time.Time{}, upd1Disabled, upd2Disabled, exists, isZombie, err
 	}
 
 	c.rejectCache.insert(chanID, rejectCacheEntry{
-		upd1Time: upd1Time.Unix(),
-		upd2Time: upd2Time.Unix(),
-		flags:    packRejectFlags(exists, isZombie),
+		upd1Time:     upd1Time.Unix(),
+		upd2Time:     upd2Time.Unix(),
+		upd1Disabled: upd1Disabled,
+		upd2Disabled: upd2Disabled,
+		flags:        packRejectFlags(exists, isZombie),
 	})
 
-	return upd1Time, upd2Time, exists, isZombie, nil
+	return upd1Time, upd2Time, upd1Disabled, upd2Disabled, exists, isZombie, nil
 }
 
 // UpdateChannelEdge retrieves and update edge of the graph database. Method
@@ -1839,8 +1849,10 @@ func (c *ChannelGraph) UpdateEdgePolicy(edge *ChannelEdgePolicy) error {
 	if entry, ok := c.rejectCache.get(edge.ChannelID); ok {
 		if isUpdate1 {
 			entry.upd1Time = edge.LastUpdate.Unix()
+			entry.upd1Disabled = edge.IsDisabled()
 		} else {
 			entry.upd2Time = edge.LastUpdate.Unix()
+			entry.upd2Disabled = edge.IsDisabled()
 		}
 		c.rejectCache.insert(edge.ChannelID, entry)
 	}

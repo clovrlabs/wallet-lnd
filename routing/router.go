@@ -766,29 +766,6 @@ func (r *ChannelRouter) pruneZombieChans() error {
 
 		isZombieChan := e1Zombie && e2Zombie
 
-		// If AssumeChannelValid is present and we've determined the
-		// channel is not a zombie, we'll look at the disabled bit for
-		// both edges. If they're both disabled, then we can interpret
-		// this as the channel being closed and can prune it from our
-		// graph.
-		if r.cfg.AssumeChannelValid && !isZombieChan {
-			var e1Disabled, e2Disabled bool
-			if e1 != nil {
-				e1Disabled = e1.IsDisabled()
-				log.Tracef("Edge #1 of ChannelID(%v) "+
-					"disabled=%v", info.ChannelID,
-					e1Disabled)
-			}
-			if e2 != nil {
-				e2Disabled = e2.IsDisabled()
-				log.Tracef("Edge #2 of ChannelID(%v) "+
-					"disabled=%v", info.ChannelID,
-					e2Disabled)
-			}
-
-			isZombieChan = e1Disabled && e2Disabled
-		}
-
 		// If the channel is not considered zombie, we can move on to
 		// the next.
 		if !isZombieChan {
@@ -1129,7 +1106,7 @@ func (r *ChannelRouter) processUpdate(msg interface{}) error {
 
 		// Prior to processing the announcement we first check if we
 		// already know of this channel, if so, then we can exit early.
-		_, _, exists, isZombie, err := r.cfg.Graph.HasChannelEdge(
+		_, _, _, _, exists, isZombie, err := r.cfg.Graph.HasChannelEdge(
 			msg.ChannelID,
 		)
 		if err != nil && err != channeldb.ErrGraphNoEdgesFound {
@@ -1264,7 +1241,7 @@ func (r *ChannelRouter) processUpdate(msg interface{}) error {
 		r.channelEdgeMtx.Lock(msg.ChannelID)
 		defer r.channelEdgeMtx.Unlock(msg.ChannelID)
 
-		edge1Timestamp, edge2Timestamp, exists, isZombie, err :=
+		edge1Timestamp, edge2Timestamp, edge1Disabled, edge2Disabled, exists, isZombie, err :=
 			r.cfg.Graph.HasChannelEdge(msg.ChannelID)
 		if err != nil && err != channeldb.ErrGraphNoEdgesFound {
 			return errors.Errorf("unable to check for edge "+
@@ -1290,6 +1267,22 @@ func (r *ChannelRouter) processUpdate(msg interface{}) error {
 				"(flags=%v|%v) for unknown chan_id=%v",
 				msg.MessageFlags, msg.ChannelFlags,
 				msg.ChannelID)
+		}
+
+		otherEdgeDisabled := edge1Disabled
+		if msg.ChannelFlags&lnwire.ChanUpdateDirection == 0 {
+			otherEdgeDisabled = edge2Disabled
+		}
+
+		// if the other side of the channel was just disabled we need to prune
+		// this channel as most chances it inicates on a closed channel.
+		if r.cfg.AssumeChannelValid && msg.IsDisabled() && otherEdgeDisabled {
+			log.Tracef("Received ChannelEdgePolicy message with disabled bit, "+
+				"Pruning zombie channel with ChannelID(%v)", msg.ChannelID)
+			if err := r.cfg.Graph.DeleteChannelEdges(msg.ChannelID); err != nil {
+				return fmt.Errorf("unable to delete zombie channel: %v", err)
+			}
+			return nil
 		}
 
 		// As edges are directional edge node has a unique policy for
@@ -2221,7 +2214,7 @@ func (r *ChannelRouter) IsPublicNode(node route.Vertex) (bool, error) {
 //
 // NOTE: This method is part of the ChannelGraphSource interface.
 func (r *ChannelRouter) IsKnownEdge(chanID lnwire.ShortChannelID) bool {
-	_, _, exists, isZombie, _ := r.cfg.Graph.HasChannelEdge(chanID.ToUint64())
+	_, _, _, _, exists, isZombie, _ := r.cfg.Graph.HasChannelEdge(chanID.ToUint64())
 	return exists || isZombie
 }
 
@@ -2232,7 +2225,7 @@ func (r *ChannelRouter) IsKnownEdge(chanID lnwire.ShortChannelID) bool {
 func (r *ChannelRouter) IsStaleEdgePolicy(chanID lnwire.ShortChannelID,
 	timestamp time.Time, flags lnwire.ChanUpdateChanFlags) bool {
 
-	edge1Timestamp, edge2Timestamp, exists, isZombie, err :=
+	edge1Timestamp, edge2Timestamp, _, _, exists, isZombie, err :=
 		r.cfg.Graph.HasChannelEdge(chanID.ToUint64())
 	if err != nil {
 		return false

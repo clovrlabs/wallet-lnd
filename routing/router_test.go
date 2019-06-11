@@ -1103,6 +1103,110 @@ func TestIgnoreChannelEdgePolicyForUnknownChannel(t *testing.T) {
 	}
 }
 
+func TestPruneDisabledEdge(t *testing.T) {
+	t.Parallel()
+
+	const startingBlockHeight = 101
+	ctx, cleanUp, err := createTestCtxFromFile(startingBlockHeight,
+		basicGraphFilePath)
+	if err != nil {
+		t.Fatalf("unable to create router: %v", err)
+	}
+	defer cleanUp()
+
+	var pub1 [33]byte
+	copy(pub1[:], priv1.PubKey().SerializeCompressed())
+
+	var pub2 [33]byte
+	copy(pub2[:], priv2.PubKey().SerializeCompressed())
+
+	// The two nodes we are about to add should not exist yet.
+	_, exists1, err := ctx.graph.HasLightningNode(pub1)
+	if err != nil {
+		t.Fatalf("unable to query graph: %v", err)
+	}
+	if exists1 {
+		t.Fatalf("node already existed")
+	}
+	_, exists2, err := ctx.graph.HasLightningNode(pub2)
+	if err != nil {
+		t.Fatalf("unable to query graph: %v", err)
+	}
+	if exists2 {
+		t.Fatalf("node already existed")
+	}
+
+	// Add the edge between the two unknown nodes to the graph, and check
+	// that the nodes are found after the fact.
+	fundingTx, _, chanID, err := createChannelEdge(ctx,
+		bitcoinKey1.SerializeCompressed(),
+		bitcoinKey2.SerializeCompressed(),
+		10000, 500)
+	if err != nil {
+		t.Fatalf("unable to create channel edge: %v", err)
+	}
+
+	fundingBlock := &wire.MsgBlock{
+		Transactions: []*wire.MsgTx{fundingTx},
+	}
+	ctx.chain.addBlock(fundingBlock, chanID.BlockHeight, chanID.BlockHeight)
+
+	edge := &channeldb.ChannelEdgeInfo{
+		ChannelID:        chanID.ToUint64(),
+		NodeKey1Bytes:    pub1,
+		NodeKey2Bytes:    pub2,
+		BitcoinKey1Bytes: pub1,
+		BitcoinKey2Bytes: pub2,
+		AuthProof:        nil,
+	}
+	if err := ctx.router.AddEdge(edge); err != nil {
+		t.Fatalf("expected to be able to add edge to the channel graph,"+
+			" even though the vertexes were unknown: %v.", err)
+	}
+
+	// We must add the edge policy to be able to use the edge for route
+	// finding.
+	edgePolicy := &channeldb.ChannelEdgePolicy{
+		SigBytes:                  testSig.Serialize(),
+		ChannelID:                 edge.ChannelID,
+		LastUpdate:                testTime,
+		TimeLockDelta:             10,
+		MinHTLC:                   1,
+		FeeBaseMSat:               10,
+		FeeProportionalMillionths: 10000,
+	}
+	edgePolicy.ChannelFlags = lnwire.ChanUpdateDisabled
+
+	if err := ctx.router.UpdateEdge(edgePolicy); err != nil {
+		t.Fatalf("unable to update edge policy: %v", err)
+	}
+
+	// Create edge in the other direction as well.
+	edgePolicy = &channeldb.ChannelEdgePolicy{
+		SigBytes:                  testSig.Serialize(),
+		ChannelID:                 edge.ChannelID,
+		LastUpdate:                testTime,
+		TimeLockDelta:             10,
+		MinHTLC:                   1,
+		FeeBaseMSat:               10,
+		FeeProportionalMillionths: 10000,
+	}
+	edgePolicy.ChannelFlags = lnwire.ChanUpdateDirection | lnwire.ChanUpdateDisabled
+
+	ctx.router.cfg.AssumeChannelValid = true
+	if err := ctx.router.UpdateEdge(edgePolicy); err != nil {
+		t.Fatalf("unable to update edge policy: %v", err)
+	}
+
+	// After the last update both channel policies should be disabled.
+	// We are checking now that the channel is pruned
+	// when AssumeChannelValid = true.
+	_, _, _, _, exists, _, err := ctx.graph.HasChannelEdge(edge.ChannelID)
+	if exists {
+		t.Fatalf("expcted disabled channel to be pruned")
+	}
+}
+
 // TestAddEdgeUnknownVertexes tests that if an edge is added that contains two
 // vertexes which we don't know of, the edge should be available for use
 // regardless. This is due to the fact that we don't actually need node
@@ -1501,7 +1605,7 @@ func TestWakeUpOnStaleBranch(t *testing.T) {
 	}
 
 	// Check that the fundingTxs are in the graph db.
-	_, _, has, isZombie, err := ctx.graph.HasChannelEdge(chanID1)
+	_, _, _, _, has, isZombie, err := ctx.graph.HasChannelEdge(chanID1)
 	if err != nil {
 		t.Fatalf("error looking for edge: %v", chanID1)
 	}
@@ -1512,7 +1616,7 @@ func TestWakeUpOnStaleBranch(t *testing.T) {
 		t.Fatal("edge was marked as zombie")
 	}
 
-	_, _, has, isZombie, err = ctx.graph.HasChannelEdge(chanID2)
+	_, _, _, _, has, isZombie, err = ctx.graph.HasChannelEdge(chanID2)
 	if err != nil {
 		t.Fatalf("error looking for edge: %v", chanID2)
 	}
@@ -1563,7 +1667,7 @@ func TestWakeUpOnStaleBranch(t *testing.T) {
 	// The channel with chanID2 should not be in the database anymore,
 	// since it is not confirmed on the longest chain. chanID1 should
 	// still be.
-	_, _, has, isZombie, err = ctx.graph.HasChannelEdge(chanID1)
+	_, _, _, _, has, isZombie, err = ctx.graph.HasChannelEdge(chanID1)
 	if err != nil {
 		t.Fatalf("error looking for edge: %v", chanID1)
 	}
@@ -1574,7 +1678,7 @@ func TestWakeUpOnStaleBranch(t *testing.T) {
 		t.Fatal("edge was marked as zombie")
 	}
 
-	_, _, has, isZombie, err = ctx.graph.HasChannelEdge(chanID2)
+	_, _, _, _, has, isZombie, err = ctx.graph.HasChannelEdge(chanID2)
 	if err != nil {
 		t.Fatalf("error looking for edge: %v", chanID2)
 	}
@@ -1716,7 +1820,7 @@ func TestDisconnectedBlocks(t *testing.T) {
 	}
 
 	// Check that the fundingTxs are in the graph db.
-	_, _, has, isZombie, err := ctx.graph.HasChannelEdge(chanID1)
+	_, _, _, _, has, isZombie, err := ctx.graph.HasChannelEdge(chanID1)
 	if err != nil {
 		t.Fatalf("error looking for edge: %v", chanID1)
 	}
@@ -1727,7 +1831,7 @@ func TestDisconnectedBlocks(t *testing.T) {
 		t.Fatal("edge was marked as zombie")
 	}
 
-	_, _, has, isZombie, err = ctx.graph.HasChannelEdge(chanID2)
+	_, _, _, _, has, isZombie, err = ctx.graph.HasChannelEdge(chanID2)
 	if err != nil {
 		t.Fatalf("error looking for edge: %v", chanID2)
 	}
@@ -1763,7 +1867,7 @@ func TestDisconnectedBlocks(t *testing.T) {
 
 	// chanID2 should not be in the database anymore, since it is not
 	// confirmed on the longest chain. chanID1 should still be.
-	_, _, has, isZombie, err = ctx.graph.HasChannelEdge(chanID1)
+	_, _, _, _, has, isZombie, err = ctx.graph.HasChannelEdge(chanID1)
 	if err != nil {
 		t.Fatalf("error looking for edge: %v", chanID1)
 	}
@@ -1774,7 +1878,7 @@ func TestDisconnectedBlocks(t *testing.T) {
 		t.Fatal("edge was marked as zombie")
 	}
 
-	_, _, has, isZombie, err = ctx.graph.HasChannelEdge(chanID2)
+	_, _, _, _, has, isZombie, err = ctx.graph.HasChannelEdge(chanID2)
 	if err != nil {
 		t.Fatalf("error looking for edge: %v", chanID2)
 	}
@@ -1848,7 +1952,7 @@ func TestRouterChansClosedOfflinePruneGraph(t *testing.T) {
 	}
 
 	// The router should now be aware of the channel we created above.
-	_, _, hasChan, isZombie, err := ctx.graph.HasChannelEdge(chanID1.ToUint64())
+	_, _, _, _, hasChan, isZombie, err := ctx.graph.HasChannelEdge(chanID1.ToUint64())
 	if err != nil {
 		t.Fatalf("error looking for edge: %v", chanID1)
 	}
@@ -1932,7 +2036,7 @@ func TestRouterChansClosedOfflinePruneGraph(t *testing.T) {
 
 	// At this point, the channel that was pruned should no longer be known
 	// by the router.
-	_, _, hasChan, isZombie, err = ctx.graph.HasChannelEdge(chanID1.ToUint64())
+	_, _, _, _, hasChan, isZombie, err = ctx.graph.HasChannelEdge(chanID1.ToUint64())
 	if err != nil {
 		t.Fatalf("error looking for edge: %v", chanID1)
 	}
@@ -2484,7 +2588,7 @@ func assertChannelsPruned(t *testing.T, graph *channeldb.ChannelGraph,
 
 	for _, channel := range channels {
 		_, shouldPrune := pruned[channel.ChannelID]
-		_, _, exists, isZombie, err := graph.HasChannelEdge(
+		_, _, _, _, exists, isZombie, err := graph.HasChannelEdge(
 			channel.ChannelID,
 		)
 		if err != nil {
