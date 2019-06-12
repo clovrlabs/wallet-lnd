@@ -29,7 +29,7 @@ import (
 	"github.com/btcsuite/btcwallet/wallet/txauthor"
 	"github.com/coreos/bbolt"
 	"github.com/davecgh/go-spew/spew"
-	"github.com/grpc-ecosystem/go-grpc-middleware"
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/lightningnetwork/lnd/autopilot"
 	"github.com/lightningnetwork/lnd/build"
@@ -496,6 +496,7 @@ func newRPCServer(s *server, macService *macaroons.Service,
 		s.htlcSwitch, activeNetParams.Params, s.chanRouter,
 		routerBackend, s.nodeSigner, s.chanDB, s.sweeper,
 		tower,
+		s.peerNotifier,
 	)
 	if err != nil {
 		return nil, err

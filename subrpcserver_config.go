@@ -12,12 +12,14 @@ import (
 	"github.com/lightningnetwork/lnd/lnrpc/autopilotrpc"
 	"github.com/lightningnetwork/lnd/lnrpc/chainrpc"
 	"github.com/lightningnetwork/lnd/lnrpc/invoicesrpc"
+	"github.com/lightningnetwork/lnd/lnrpc/peerrpc"
 	"github.com/lightningnetwork/lnd/lnrpc/routerrpc"
 	"github.com/lightningnetwork/lnd/lnrpc/signrpc"
 	"github.com/lightningnetwork/lnd/lnrpc/walletrpc"
 	"github.com/lightningnetwork/lnd/lnrpc/watchtowerrpc"
 	"github.com/lightningnetwork/lnd/macaroons"
 	"github.com/lightningnetwork/lnd/netann"
+	"github.com/lightningnetwork/lnd/peernotifier"
 	"github.com/lightningnetwork/lnd/routing"
 	"github.com/lightningnetwork/lnd/sweep"
 	"github.com/lightningnetwork/lnd/watchtower"
@@ -62,6 +64,7 @@ type subRPCServerConfigs struct {
 	// WatchtowerRPC is a sub-RPC server that exposes functionality allowing
 	// clients to monitor and control their embedded watchtower.
 	WatchtowerRPC *watchtowerrpc.Config `group:"watchtowerrpc" namespace:"watchtowerrpc"`
+	PeerRPC       *peerrpc.Config       `group:"peerrpc" namespace:"peerrpc"`
 }
 
 // PopulateDependencies attempts to iterate through all the sub-server configs
@@ -81,7 +84,8 @@ func (s *subRPCServerConfigs) PopulateDependencies(cc *chainControl,
 	nodeSigner *netann.NodeSigner,
 	chanDB *channeldb.DB,
 	sweeper *sweep.UtxoSweeper,
-	tower *watchtower.Standalone) error {
+	tower *watchtower.Standalone,
+	peerNotifier *peernotifier.PeerNotifier) error {
 
 	// First, we'll use reflect to obtain a version of the config struct
 	// that allows us to programmatically inspect its fields.
@@ -211,6 +215,18 @@ func (s *subRPCServerConfigs) PopulateDependencies(cc *chainControl,
 			)
 			subCfgValue.FieldByName("RouterBackend").Set(
 				reflect.ValueOf(routerBackend),
+			)
+		case *peerrpc.Config:
+			subCfgValue := extractReflectValue(subCfg)
+
+			subCfgValue.FieldByName("NetworkDir").Set(
+				reflect.ValueOf(networkDir),
+			)
+			subCfgValue.FieldByName("MacService").Set(
+				reflect.ValueOf(macService),
+			)
+			subCfgValue.FieldByName("PeerNotifier").Set(
+				reflect.ValueOf(peerNotifier),
 			)
 
 		case *watchtowerrpc.Config:

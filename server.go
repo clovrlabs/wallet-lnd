@@ -2769,7 +2769,8 @@ func (s *server) peerInitializer(p *peer) {
 	}
 	delete(s.peerConnectedListeners, pubStr)
 
-	s.peerNotifier.NotifyPeerConnectionChangedEvent(pubStr,
+	s.peerNotifier.NotifyPeerConnectionChangedEvent(
+		hex.EncodeToString(p.addr.IdentityKey.SerializeCompressed()),
 		p.conn.RemoteAddr().String(), true)
 }
 
@@ -2963,7 +2964,8 @@ func (s *server) removePeer(p *peer) {
 		delete(s.outboundPeers, pubStr)
 	}
 
-	s.peerNotifier.NotifyPeerConnectionChangedEvent(pubStr,
+	s.peerNotifier.NotifyPeerConnectionChangedEvent(
+		hex.EncodeToString(p.addr.IdentityKey.SerializeCompressed()),
 		p.conn.RemoteAddr().String(), false)
 }
 
