@@ -29,15 +29,16 @@ func (e errNoRoute) Error() string {
 // paymentLifecycle holds all information about the current state of a payment
 // needed to resume if from any point.
 type paymentLifecycle struct {
-	router         *ChannelRouter
-	payment        *LightningPayment
-	paySession     PaymentSession
-	timeoutChan    <-chan time.Time
-	currentHeight  int32
-	finalCLTVDelta uint16
-	attempt        *channeldb.PaymentAttemptInfo
-	circuit        *sphinx.Circuit
-	lastError      *htlcswitch.ForwardingError
+	router          *ChannelRouter
+	payment         *LightningPayment
+	paySession      PaymentSession
+	timeoutChan     <-chan time.Time
+	currentHeight   int32
+	finalCLTVDelta  uint16
+	attempt         *channeldb.PaymentAttemptInfo
+	circuit         *sphinx.Circuit
+	lastError       *htlcswitch.ForwardingError
+	routesAttempted []route.Route
 }
 
 // resumePayment resumes the paymentLifecycle from the current state.
@@ -192,6 +193,7 @@ func (p *paymentLifecycle) createNewPaymentAttempt() (lnwire.ShortChannelID,
 		// timeout.
 		err := p.router.cfg.Control.Fail(
 			p.payment.PaymentHash, channeldb.FailureReasonTimeout,
+			p.routesAttempted,
 		)
 		if err != nil {
 			return lnwire.ShortChannelID{}, nil, err
@@ -223,6 +225,7 @@ func (p *paymentLifecycle) createNewPaymentAttempt() (lnwire.ShortChannelID,
 		// as permanently failed.
 		saveErr := p.router.cfg.Control.Fail(
 			p.payment.PaymentHash, channeldb.FailureReasonNoRoute,
+			p.routesAttempted,
 		)
 		if saveErr != nil {
 			return lnwire.ShortChannelID{}, nil, saveErr
@@ -352,6 +355,7 @@ func (p *paymentLifecycle) handleSendError(sendErr error) error {
 		// Save the forwarding error so it can be returned if this turns
 		// out to be the last attempt.
 		p.lastError = fErr
+		p.routesAttempted = append(p.routesAttempted, p.attempt.Route)
 	}
 
 	if finalOutcome {
@@ -363,6 +367,7 @@ func (p *paymentLifecycle) handleSendError(sendErr error) error {
 		// don't continue path finding.
 		err := p.router.cfg.Control.Fail(
 			p.payment.PaymentHash, channeldb.FailureReasonNoRoute,
+			p.routesAttempted,
 		)
 		if err != nil {
 			return err

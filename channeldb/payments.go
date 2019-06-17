@@ -80,6 +80,10 @@ var (
 	// paymentFailInfoKey is a key used in the payment's sub-bucket to
 	// store information about the reason a payment failed.
 	paymentFailInfoKey = []byte("payment-fail-info")
+
+	// paymentFailedRoutesKey is a key used in the payment's sub-bucket to
+	// store the faile routes attempted in a failed payment.
+	paymentFailedRoutesKey = []byte("payment-failed-routes")
 )
 
 // FailureReason encodes the reason a payment ultimately failed.
@@ -236,6 +240,12 @@ type Payment struct {
 	//
 	// NOTE: Can be nil if payment is not failed.
 	Failure *FailureReason
+
+	// FailedRoutes stores the failed routes in previous attempts for this
+	// payment.
+	//
+	//Note: Empty if payment is not failed.
+	FailedRoutes []route.Route
 }
 
 // FetchPayments returns all sent payments found in the DB.
@@ -357,6 +367,27 @@ func fetchPayment(bucket *bbolt.Bucket) (*Payment, error) {
 	if b != nil {
 		reason := FailureReason(b[0])
 		p.Failure = &reason
+	}
+
+	// Get the failed routes of previous attempts.
+	b = bucket.Get(paymentFailedRoutesKey)
+	if b != nil {
+		r = bytes.NewReader(b)
+
+		var routesCount uint32
+		if err := ReadElements(r, &routesCount); err != nil {
+			return nil, err
+		}
+
+		var failedRoutes []route.Route
+		for i := uint32(0); i < routesCount; i++ {
+			r, err := deserializeRoute(r)
+			if err != nil {
+				return nil, err
+			}
+			failedRoutes = append(failedRoutes, r)
+		}
+		p.FailedRoutes = failedRoutes
 	}
 
 	return p, nil

@@ -31,10 +31,11 @@ type ControlTower interface {
 	Success(lntypes.Hash, lntypes.Preimage) error
 
 	// Fail transitions a payment into the Failed state, and records the
-	// reason the payment failed. After invoking this method, InitPayment
+	// reason the payment failed in additionn to the routes of previous
+	// failed attempts. After invoking this method, InitPayment
 	// should return nil on its next call for this payment hash, allowing
 	// the switch to make a subsequent payment.
-	Fail(lntypes.Hash, channeldb.FailureReason) error
+	Fail(lntypes.Hash, channeldb.FailureReason, []route.Route) error
 
 	// FetchInFlightPayments returns all payments with status InFlight.
 	FetchInFlightPayments() ([]*channeldb.InFlightPayment, error)
@@ -125,13 +126,13 @@ func (p *controlTower) Success(paymentHash lntypes.Hash,
 }
 
 // Fail transitions a payment into the Failed state, and records the reason the
-// payment failed. After invoking this method, InitPayment should return nil on
-// its next call for this payment hash, allowing the switch to make a
-// subsequent payment.
+// payment failed in additionn to the routes of previous failed attempts.
+// After invoking this method, InitPayment should return nil on its next call
+// for this payment hash, allowing the switch to make a subsequent payment.
 func (p *controlTower) Fail(paymentHash lntypes.Hash,
-	reason channeldb.FailureReason) error {
+	reason channeldb.FailureReason, routesAttempted []route.Route) error {
 
-	err := p.db.Fail(paymentHash, reason)
+	err := p.db.Fail(paymentHash, reason, routesAttempted)
 	if err != nil {
 		return err
 	}

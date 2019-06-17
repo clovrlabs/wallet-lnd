@@ -133,6 +133,13 @@ func (p *PaymentControl) InitPayment(paymentHash lntypes.Hash,
 			return err
 		}
 
+		// We'll also delete the failed routes from previous attempt
+		// as we are starting a new payment session.
+		err = bucket.Delete(paymentFailedRoutesKey)
+		if err != nil {
+			return err
+		}
+
 		// Also delete any lingering failure info now that we are
 		// re-attempting.
 		return bucket.Delete(paymentFailInfoKey)
@@ -242,11 +249,11 @@ func (p *PaymentControl) Success(paymentHash lntypes.Hash,
 }
 
 // Fail transitions a payment into the Failed state, and records the reason the
-// payment failed. After invoking this method, InitPayment should return nil on
-// its next call for this payment hash, allowing the switch to make a
-// subsequent payment.
+// payment failed in addition to the failed routes in previous attempts.
+// After invoking this method, InitPayment should return nil on its next call
+// for this payment hash, allowing the switch to make a subsequent payment.
 func (p *PaymentControl) Fail(paymentHash lntypes.Hash,
-	reason FailureReason) error {
+	reason FailureReason, failedRoutes []route.Route) error {
 
 	var updateErr error
 	err := p.db.Batch(func(tx *bbolt.Tx) error {
@@ -266,6 +273,21 @@ func (p *PaymentControl) Fail(paymentHash lntypes.Hash,
 		if err := ensureInFlight(bucket); err != nil {
 			updateErr = err
 			return nil
+		}
+
+		// Save the failed routes of previous attempts.
+		var a bytes.Buffer
+		if err := WriteElements(&a, uint32(len(failedRoutes))); err != nil {
+			return err
+		}
+		for _, r := range failedRoutes {
+			if err := serializeRoute(&a, r); err != nil {
+				return err
+			}
+		}
+
+		if err := bucket.Put(paymentFailedRoutesKey, a.Bytes()); err != nil {
+			return err
 		}
 
 		// Put the failure reason in the bucket for record keeping.
