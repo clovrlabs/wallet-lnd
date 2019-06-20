@@ -510,6 +510,64 @@ func GetUtxos(db walletdb.DB, txstore *wtxmgr.Store, net *chaincfg.Params, start
 	return utxos, nil
 }
 
+func RedeemFees(db *channeldb.DB, net *chaincfg.Params, wallet *lnwallet.LightningWallet, hash []byte, feePerKw lnwallet.SatPerKWeight) (btcutil.Amount, error) {
+	creationHeight, _, _, script, err := getSwapperSubmarineData(db, net.ScriptHashAddrID, hash[:])
+	if err != nil {
+		return 0, err
+	}
+	address, err := newAddressWitnessScriptHash(script, net)
+	if err != nil {
+		return 0, err
+	}
+	w := wallet.WalletController.(*btcwallet.BtcWallet).InternalWallet()
+	utxos, err := GetUtxos(w.Database(), w.TxStore, net, int32(creationHeight), address.String())
+	if err != nil {
+		return 0, err
+	}
+	if len(utxos) == 0 {
+		return 0, errors.New("no utxo")
+	}
+
+	redeemTx := wire.NewMsgTx(1)
+
+	// Add the inputs without the witness and calculate the amount to redeem
+	var amount btcutil.Amount
+	for _, utxo := range utxos {
+		amount += utxo.Value
+		txIn := wire.NewTxIn(&utxo.OutPoint, nil, nil)
+		txIn.Sequence = 0
+		redeemTx.AddTxIn(txIn)
+	}
+
+	//Generate a random address
+	privateKey, err := btcec.NewPrivateKey(btcec.S256())
+	if err != nil {
+		return 0, err
+	}
+	redeemAddress, err := btcutil.NewAddressPubKey(privateKey.PubKey().SerializeCompressed(), net)
+	if err != nil {
+		return 0, err
+	}
+	// Add the single output
+	redeemScript, err := txscript.PayToAddrScript(redeemAddress)
+	if err != nil {
+		return 0, err
+	}
+	txOut := wire.TxOut{PkScript: redeemScript}
+	redeemTx.AddTxOut(&txOut)
+
+	_, currentHeight, err := w.ChainClient().GetBestBlock()
+	if err != nil {
+		return 0, err
+	}
+	redeemTx.LockTime = uint32(currentHeight)
+
+	// Calcluate the weight and the fee
+	weight := 4*redeemTx.SerializeSizeStripped() + redeemWitnessInputSize*len(redeemTx.TxIn)
+	// Adjust the amount in the txout
+	return feePerKw.FeeForWeight(int64(weight)), nil
+}
+
 // Redeem
 func Redeem(db *channeldb.DB, net *chaincfg.Params, wallet *lnwallet.LightningWallet, preimage []byte, redeemAddress btcutil.Address, feePerKw lnwallet.SatPerKWeight) (*wire.MsgTx, error) {
 

@@ -299,6 +299,32 @@ func (s *Server) UnspentAmount(ctx context.Context,
 	return &UnspentAmountResponse{Amount: totalAmount, LockHeight: lockHeight, Utxos: u}, nil
 }
 
+func (s *Server) SubSwapServiceRedeemFees(ctx context.Context,
+	in *SubSwapServiceRedeemFeesRequest) (*SubSwapServiceRedeemFeesResponse, error) {
+	satPerKw := lnwallet.SatPerKVByte(in.SatPerByte * 1000).FeePerKWeight()
+	feePerKw, err := sweep.DetermineFeePerKw(
+		s.cfg.FeeEstimator, sweep.FeePreference{
+			ConfTarget: uint32(in.TargetConf),
+			FeeRate:    satPerKw,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	amount, err := submarineswap.RedeemFees(s.cfg.Wallet.Cfg.Database,
+		s.cfg.ActiveNetParams,
+		s.cfg.Wallet,
+		in.Hash,
+		feePerKw,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+	return &SubSwapServiceRedeemFeesResponse{Amount: int64(amount)}, nil
+}
+
 func (s *Server) SubSwapServiceRedeem(ctx context.Context,
 	in *SubSwapServiceRedeemRequest) (*SubSwapServiceRedeemResponse, error) {
 

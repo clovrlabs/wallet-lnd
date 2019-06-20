@@ -52,6 +52,17 @@ message UnspentAmountResponse {
     int32 lock_height = 2 [json_name = "lock_height"];
     repeated Utxo utxos = 3 [json_name = "utxos"];
 }
+message SubSwapServiceRedeemFeesRequest {
+    /// The hash (to be used by a swapper service)
+    bytes hash = 1 [json_name = "hash"];
+    /// The target number of blocks that the funding transaction should be confirmed by.
+    int32 target_conf = 2;
+    /// A manual fee rate set in sat/byte that should be used when crafting the funding transaction.
+    int64 sat_per_byte = 3;
+}
+message SubSwapServiceRedeemFeesResponse {
+    int64 amount = 1 [json_name = "amount"];
+}
 
 message SubSwapServiceRedeemRequest {
     bytes preimage = 1 [json_name = "preimage"];
@@ -105,6 +116,12 @@ service SubmarineSwapper {
     the block height and the age of the first transaction sending btc to the address.
     */
     rpc UnspentAmount (UnspentAmountRequest) returns (UnspentAmountResponse) {
+    }
+
+    /**
+    SubSwapServiceFeesRedeem returns the fees to redeem the amount received.
+    */
+    rpc SubSwapServiceRedeemFees (SubSwapServiceRedeemFeesRequest) returns (SubSwapServiceRedeemFeesResponse) {
     }
 
     /**
