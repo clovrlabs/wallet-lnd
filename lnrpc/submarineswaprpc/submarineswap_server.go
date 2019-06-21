@@ -59,6 +59,10 @@ var (
 			Entity: "onchain",
 			Action: "read",
 		}},
+		"/submarineswaprpc.SubmarineSwapper/SubSwapServiceRedeemFees": {{
+			Entity: "onchain",
+			Action: "read",
+		}},
 		"/submarineswaprpc.SubmarineSwapper/SubSwapServiceRedeem": {{
 			Entity: "onchain",
 			Action: "write",
