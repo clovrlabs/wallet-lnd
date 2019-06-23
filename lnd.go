@@ -34,7 +34,7 @@ import (
 	"golang.org/x/net/context"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"	
+	"google.golang.org/grpc/credentials"
 
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcutil"
@@ -62,7 +62,7 @@ const (
 	autogenCertValidity = 14 /*months*/ * 30 /*days*/ * 24 * time.Hour
 )
 
-var (	
+var (
 	cfg              *config
 	registeredChains = newChainRegistry()
 
@@ -112,6 +112,12 @@ type Dependencies interface {
 func Main(deps Dependencies) error {
 	readyChan := deps.ReadyChan()
 	logWriter.RotatorPipe = deps.LogPipeWriter()
+
+	//Start the signal that is responsible for shutdown
+	if err := signal.Start(); err != nil {
+		ltndLog.Errorf("failed to start signal %v", err)
+		return err
+	}
 
 	// Load the configuration, and parse any command line options. This
 	// function will also set up logging properly.
@@ -215,7 +221,7 @@ func Main(deps Dependencies) error {
 		mainChain = cfg.Litecoin
 	}
 	var neutrinoCS *neutrino.ChainService
-	if mainChain.Node == "neutrino" {		
+	if mainChain.Node == "neutrino" {
 		if deps != nil {
 			neutrinoCS = deps.ChainService()
 		}
@@ -228,7 +234,7 @@ func Main(deps Dependencies) error {
 				return err
 			}
 			neutrinoCS = neutrinoBackend
-		}		
+		}
 	}
 
 	var (
