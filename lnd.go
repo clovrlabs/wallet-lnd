@@ -110,8 +110,11 @@ type Dependencies interface {
 // created in the top-level scope of a main method aren't executed if os.Exit()
 // is called.
 func Main(deps Dependencies) error {
-	readyChan := deps.ReadyChan()
-	logWriter.RotatorPipe = deps.LogPipeWriter()
+	var readyChan chan interface{}
+	if deps != nil {
+		readyChan = deps.ReadyChan()
+		logWriter.RotatorPipe = deps.LogPipeWriter()
+	}
 
 	//Start the signal that is responsible for shutdown
 	if err := signal.Start(); err != nil {
