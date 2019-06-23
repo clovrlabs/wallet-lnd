@@ -314,6 +314,7 @@ type testChannelPolicy struct {
 	FeeRate     lnwire.MilliSatoshi
 	LastUpdate  time.Time
 	Disabled    bool
+	Initiator   bool
 }
 
 type testChannelEnd struct {
@@ -346,6 +347,9 @@ func symmetricTestChannel(alias1 string, alias2 string, capacity btcutil.Amount,
 		id = chanID[0]
 	}
 
+	node2Policy := *policy
+	node2Policy.Initiator = !policy.Initiator
+
 	return &testChannel{
 		Capacity: capacity,
 		Node1: &testChannelEnd{
@@ -354,7 +358,7 @@ func symmetricTestChannel(alias1 string, alias2 string, capacity btcutil.Amount,
 		},
 		Node2: &testChannelEnd{
 			Alias:             alias2,
-			testChannelPolicy: policy,
+			testChannelPolicy: &node2Policy,
 		},
 		ChannelID: id,
 	}
@@ -518,9 +522,12 @@ func createTestGraphFromChannels(testChannels []*testChannel) (*testGraphInstanc
 			if testChannel.Node1.MaxHTLC != 0 {
 				msgFlags |= lnwire.ChanUpdateOptionMaxHtlc
 			}
-			var channelFlags lnwire.ChanUpdateChanFlags
+			channelFlags := lnwire.ChanUpdateChanFlags(0)
 			if testChannel.Node1.Disabled {
 				channelFlags |= lnwire.ChanUpdateDisabled
+			}
+			if testChannel.Node1.Initiator {
+				channelFlags |= lnwire.ChanUpdateDirection
 			}
 			edgePolicy := &channeldb.ChannelEdgePolicy{
 				SigBytes:                  testSig.Serialize(),
@@ -544,9 +551,12 @@ func createTestGraphFromChannels(testChannels []*testChannel) (*testGraphInstanc
 			if testChannel.Node2.MaxHTLC != 0 {
 				msgFlags |= lnwire.ChanUpdateOptionMaxHtlc
 			}
-			channelFlags := lnwire.ChanUpdateDirection
+			channelFlags := lnwire.ChanUpdateChanFlags(0)
 			if testChannel.Node2.Disabled {
 				channelFlags |= lnwire.ChanUpdateDisabled
+			}
+			if testChannel.Node2.Initiator {
+				channelFlags |= lnwire.ChanUpdateDirection
 			}
 			edgePolicy := &channeldb.ChannelEdgePolicy{
 				SigBytes:                  testSig.Serialize(),

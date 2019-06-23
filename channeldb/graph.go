@@ -118,6 +118,18 @@ var (
 	// edge's participants.
 	zombieBucket = []byte("zombie-index")
 
+	// disabledEdgePolicyBucket is a sub-bucket of the main edgeBucket bucket
+	// responsible for maintaining an index of disabled edge policies.
+	// Each entry exists within the bucket as follows:
+	//
+	// maps: <chanID><direction> -> nil
+	//
+	// The chanID represents the channel ID of the edge and the direction is
+	// one byte representing the direction of the edge.
+	// The main purpose of this index is to allow pruning disabled channels
+	// In a fast way without the need to iterate all over the graph.
+	disabledEdgePolicyBucket = []byte("disabled-edge-policy-index")
+
 	// graphMetaBucket is a top-level bucket which stores various meta-deta
 	// related to the on-disk channel graph. Data stored in this bucket
 	// includes the block to which the graph has been synced to, the total
@@ -234,6 +246,44 @@ func (c *ChannelGraph) ForEachChannel(cb func(*ChannelEdgeInfo, *ChannelEdgePoli
 			return cb(&edgeInfo, edge1, edge2)
 		})
 	})
+}
+
+// DisabledChannelIDs returns the channel ids of disabled channels.
+// A channel is disabled when two of the associated ChanelEdgePolicies
+// have their disabled bit on.
+func (c *ChannelGraph) DisabledChannelIDs() ([]uint64, error) {
+
+	var disabledChanIDs []uint64
+	chanEdgeFound := make(map[uint64]bool)
+
+	err := c.db.View(func(tx *bbolt.Tx) error {
+		edges := tx.Bucket(edgeBucket)
+		if edges == nil {
+			return nil
+		}
+
+		disabledEdgePolicyIndex := edges.Bucket(disabledEdgePolicyBucket)
+		if disabledEdgePolicyIndex == nil {
+			return nil
+		}
+
+		// We iterate over all disabled policies and we add each channel that
+		// has more than one disabled policy to disabledChanIDs array.
+		disabledEdgePolicyIndex.ForEach(func(k, v []byte) error {
+			chanID := byteOrder.Uint64(k[:8])
+			if chanEdgeFound[chanID] {
+				delete(chanEdgeFound, chanID)
+				disabledChanIDs = append(disabledChanIDs, chanID)
+				return nil
+			}
+
+			chanEdgeFound[chanID] = true
+			return nil
+		})
+		return nil
+	})
+
+	return disabledChanIDs, err
 }
 
 // ForEachNode iterates through all the stored vertices/nodes in the graph,
@@ -1799,6 +1849,9 @@ func delChannelEdge(edges, edgeIndex, chanIndex, zombieIndex,
 			return err
 		}
 	}
+
+	updateEdgePolicyDisabledIndex(edges, cid, false, false)
+	updateEdgePolicyDisabledIndex(edges, cid, true, false)
 
 	// With the edge data deleted, we can purge the information from the two
 	// edge indexes.
@@ -3616,7 +3669,32 @@ func putChanEdgePolicy(edges, nodes *bbolt.Bucket, edge *ChannelEdgePolicy,
 		return err
 	}
 
+	updateEdgePolicyDisabledIndex(edges, edge.ChannelID,
+		edge.ChannelFlags&lnwire.ChanUpdateDirection > 0, edge.IsDisabled())
+
 	return edges.Put(edgeKey[:], b.Bytes()[:])
+}
+
+func updateEdgePolicyDisabledIndex(edges *bbolt.Bucket, chanID uint64,
+	initiator bool, disabled bool) error {
+
+	var disabledEdgeKey [8 + 1]byte
+	byteOrder.PutUint64(disabledEdgeKey[0:], chanID)
+	if initiator {
+		disabledEdgeKey[8] = 1
+	}
+
+	disabledEdgePolicyIndex, err := edges.CreateBucketIfNotExists(disabledEdgePolicyBucket)
+	if err != nil {
+		return err
+	}
+
+	if disabled {
+		err = disabledEdgePolicyIndex.Put(disabledEdgeKey[:], nil)
+	} else {
+		err = disabledEdgePolicyIndex.Delete(disabledEdgeKey[:])
+	}
+	return err
 }
 
 // putChanEdgePolicyUnknown marks the edge policy as unknown

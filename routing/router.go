@@ -822,10 +822,31 @@ func (r *ChannelRouter) pruneZombieChans() error {
 		return nil
 	}
 
-	err := r.cfg.Graph.ForEachChannel(filterPruneChans)
+	startTime := time.Unix(0, 0)
+	endTime := time.Now().Add(-1 * chanExpiry)
+	updates, err := r.cfg.Graph.ChanUpdatesInHorizon(startTime, endTime)
+
 	if err != nil {
-		return fmt.Errorf("unable to filter local zombie channels: "+
-			"%v", err)
+		return fmt.Errorf("Unable to filter local zombie "+
+			"chans: %v", err)
+	}
+
+	disabledChanIDs, err := r.cfg.Graph.DisabledChannelIDs()
+	if err != nil {
+		return fmt.Errorf("Unable to filter local zombie "+
+			"chans: %v", err)
+	}
+
+	edges, err := r.cfg.Graph.FetchChanInfos(disabledChanIDs)
+	if err != nil {
+		return fmt.Errorf("Unable to filter local zombie "+
+			"chans: %v", err)
+	}
+
+	updates = append(updates, edges...)
+
+	for _, u := range updates {
+		filterPruneChans(u.Info, u.Policy1, u.Policy2)
 	}
 
 	log.Infof("Pruning %v zombie channels", len(chansToPrune))
