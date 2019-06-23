@@ -1220,8 +1220,8 @@ func (s *server) Start() error {
 				startErr = err
 				return
 			}
+			cleanup = cleanup.add(s.towerClient.Stop)
 		}
-		cleanup = cleanup.add(s.towerClient.Stop)
 
 		if err := s.htlcSwitch.Start(); err != nil {
 			startErr = err
