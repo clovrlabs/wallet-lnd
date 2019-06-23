@@ -503,9 +503,9 @@ func (d *AuthenticatedGossiper) Start() error {
 }
 
 // Stop signals any active goroutines for a graceful closure.
-func (d *AuthenticatedGossiper) Stop() {
+func (d *AuthenticatedGossiper) Stop() error {
 	if !atomic.CompareAndSwapUint32(&d.stopped, 0, 1) {
-		return
+		return nil
 	}
 
 	log.Info("Authenticated Gossiper is stopping")
@@ -520,6 +520,7 @@ func (d *AuthenticatedGossiper) Stop() {
 	// We'll stop our reliable sender after all of the gossiper's goroutines
 	// have exited to ensure nothing can cause it to continue executing.
 	d.reliableSender.Stop()
+	return nil
 }
 
 // TODO(roasbeef): need method to get current gossip timestamp?
