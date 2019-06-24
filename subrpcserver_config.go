@@ -12,6 +12,7 @@ import (
 	"github.com/lightningnetwork/lnd/invoices"
 	"github.com/lightningnetwork/lnd/lnrpc/autopilotrpc"
 	"github.com/lightningnetwork/lnd/lnrpc/backuprpc"
+	"github.com/lightningnetwork/lnd/lnrpc/breezbackuprpc"
 	"github.com/lightningnetwork/lnd/lnrpc/chainrpc"
 	"github.com/lightningnetwork/lnd/lnrpc/invoicesrpc"
 	"github.com/lightningnetwork/lnd/lnrpc/peerrpc"
@@ -20,6 +21,7 @@ import (
 	"github.com/lightningnetwork/lnd/lnrpc/submarineswaprpc"
 	"github.com/lightningnetwork/lnd/lnrpc/walletrpc"
 	"github.com/lightningnetwork/lnd/lnrpc/watchtowerrpc"
+	"github.com/lightningnetwork/lnd/lnwallet/btcwallet"
 	"github.com/lightningnetwork/lnd/macaroons"
 	"github.com/lightningnetwork/lnd/netann"
 	"github.com/lightningnetwork/lnd/peernotifier"
@@ -70,6 +72,7 @@ type subRPCServerConfigs struct {
 	BackupRPC        *backuprpc.Config        `group:"backuprpc" namespace:"backuprpc"`
 	SubmarineSwapRPC *submarineswaprpc.Config `group:"submarineswaprpc" namespace:"submarineswaprpc"`
 	PeerRPC          *peerrpc.Config          `group:"peerrpc" namespace:"peerrpc"`
+	BreezBackupRPC   *breezbackuprpc.Config   `group:"breezbackuprpc" namespace:"breezbackuprpc"`
 }
 
 // PopulateDependencies attempts to iterate through all the sub-server configs
@@ -272,6 +275,25 @@ func (s *subRPCServerConfigs) PopulateDependencies(cc *chainControl,
 			)
 			subCfgValue.FieldByName("Wallet").Set(
 				reflect.ValueOf(cc.wallet),
+			)
+
+		case *breezbackuprpc.Config:
+			subCfgValue := extractReflectValue(subCfg)
+
+			subCfgValue.FieldByName("NetworkDir").Set(
+				reflect.ValueOf(networkDir),
+			)
+			subCfgValue.FieldByName("ActiveNetParams").Set(
+				reflect.ValueOf(activeNetParams),
+			)
+			subCfgValue.FieldByName("MacService").Set(
+				reflect.ValueOf(macService),
+			)
+			subCfgValue.FieldByName("ChannelDB").Set(
+				reflect.ValueOf(cc.wallet.Cfg.Database),
+			)
+			subCfgValue.FieldByName("WalletDB").Set(
+				reflect.ValueOf(cc.wallet.WalletController.(*btcwallet.BtcWallet).InternalWallet().Database()),
 			)
 
 		default:
