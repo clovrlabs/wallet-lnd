@@ -104,6 +104,7 @@ type Dependencies interface {
 	ReadyChan() chan interface{}
 	LogPipeWriter() *io.PipeWriter
 	ChainService() *neutrino.ChainService
+	ChanDB() *channeldb.DB
 }
 
 // Main is the true entry point for lnd. This function is required since defers
@@ -111,9 +112,12 @@ type Dependencies interface {
 // is called.
 func Main(args []string, deps Dependencies) error {
 	var readyChan chan interface{}
+	var chanDB *channeldb.DB
+
 	if deps != nil {
 		readyChan = deps.ReadyChan()
 		logWriter.RotatorPipe = deps.LogPipeWriter()
+		chanDB = deps.ChanDB()
 	}
 	if args != nil {
 		os.Args = args
@@ -193,16 +197,18 @@ func Main(args []string, deps Dependencies) error {
 
 	// Open the channeldb, which is dedicated to storing channel, and
 	// network related metadata.
-	chanDB, err := channeldb.Open(
-		graphDir,
-		channeldb.OptionSetRejectCacheSize(cfg.Caches.RejectCacheSize),
-		channeldb.OptionSetChannelCacheSize(cfg.Caches.ChannelCacheSize),
-	)
-	if err != nil {
-		ltndLog.Errorf("unable to open channeldb: %v", err)
-		return err
+	if chanDB == nil {
+		chanDB, err := channeldb.Open(
+			graphDir,
+			channeldb.OptionSetRejectCacheSize(cfg.Caches.RejectCacheSize),
+			channeldb.OptionSetChannelCacheSize(cfg.Caches.ChannelCacheSize),
+		)
+		if err != nil {
+			ltndLog.Errorf("unable to open channeldb: %v", err)
+			return err
+		}
+		defer chanDB.Close()
 	}
-	defer chanDB.Close()
 
 	// Only process macaroons if --no-macaroons isn't set.
 	ctx := context.Background()
