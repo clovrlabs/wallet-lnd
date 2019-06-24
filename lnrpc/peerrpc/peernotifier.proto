@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package peerrpc;
+
+message PeerSubscription {    
+}
+
+message PeerNotification {
+    /// The identity pubkey of the peer
+    string pub_key = 1 [json_name = "pub_key"];
+
+    /// Network address of the peer; eg `127.0.0.1:10011`
+    string address = 2 [json_name = "address"];
+
+    /// The flag reflects if this is a connected or disconnected notification
+    bool connected = 3 [json_name = "connected"];
+}
+
+service PeerNotifier {
+    rpc SubscribePeers (PeerSubscription) returns (stream PeerNotification) ;
+}

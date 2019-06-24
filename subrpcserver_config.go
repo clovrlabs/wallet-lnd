@@ -14,6 +14,7 @@ import (
 	"github.com/lightningnetwork/lnd/lnrpc/backuprpc"
 	"github.com/lightningnetwork/lnd/lnrpc/chainrpc"
 	"github.com/lightningnetwork/lnd/lnrpc/invoicesrpc"
+	"github.com/lightningnetwork/lnd/lnrpc/peerrpc"
 	"github.com/lightningnetwork/lnd/lnrpc/routerrpc"
 	"github.com/lightningnetwork/lnd/lnrpc/signrpc"
 	"github.com/lightningnetwork/lnd/lnrpc/submarineswaprpc"
@@ -21,6 +22,7 @@ import (
 	"github.com/lightningnetwork/lnd/lnrpc/watchtowerrpc"
 	"github.com/lightningnetwork/lnd/macaroons"
 	"github.com/lightningnetwork/lnd/netann"
+	"github.com/lightningnetwork/lnd/peernotifier"
 	"github.com/lightningnetwork/lnd/routing"
 	"github.com/lightningnetwork/lnd/sweep"
 	"github.com/lightningnetwork/lnd/watchtower"
@@ -67,6 +69,7 @@ type subRPCServerConfigs struct {
 	WatchtowerRPC    *watchtowerrpc.Config    `group:"watchtowerrpc" namespace:"watchtowerrpc"`
 	BackupRPC        *backuprpc.Config        `group:"backuprpc" namespace:"backuprpc"`
 	SubmarineSwapRPC *submarineswaprpc.Config `group:"submarineswaprpc" namespace:"submarineswaprpc"`
+	PeerRPC          *peerrpc.Config          `group:"peerrpc" namespace:"peerrpc"`
 }
 
 // PopulateDependencies attempts to iterate through all the sub-server configs
@@ -87,7 +90,8 @@ func (s *subRPCServerConfigs) PopulateDependencies(cc *chainControl,
 	chanDB *channeldb.DB,
 	sweeper *sweep.UtxoSweeper,
 	tower *watchtower.Standalone,
-	backupNotifier *backupnotifier.BackupNotifier) error {
+	backupNotifier *backupnotifier.BackupNotifier,
+	peerNotifier *peernotifier.PeerNotifier) error {
 
 	// First, we'll use reflect to obtain a version of the config struct
 	// that allows us to programmatically inspect its fields.
@@ -229,6 +233,20 @@ func (s *subRPCServerConfigs) PopulateDependencies(cc *chainControl,
 			)
 			subCfgValue.FieldByName("BackupNotifier").Set(
 				reflect.ValueOf(backupNotifier),
+			)
+
+		case *peerrpc.Config:
+			subCfgValue := extractReflectValue(subCfg)
+
+			subCfgValue.FieldByName("NetworkDir").Set(
+				reflect.ValueOf(networkDir),
+			)
+			subCfgValue.FieldByName("MacService").Set(
+				reflect.ValueOf(macService),
+			)
+
+			subCfgValue.FieldByName("PeerNotifier").Set(
+				reflect.ValueOf(peerNotifier),
 			)
 
 		case *watchtowerrpc.Config:

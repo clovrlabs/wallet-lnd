@@ -502,7 +502,7 @@ func newRPCServer(s *server, macService *macaroons.Service,
 		s.cc, networkDir, macService, atpl, invoiceRegistry,
 		s.htlcSwitch, activeNetParams.Params, s.chanRouter,
 		routerBackend, s.nodeSigner, s.chanDB, s.sweeper,
-		tower, s.backupNotifier,
+		tower, s.backupNotifier, s.peerNotifier,
 	)
 	if err != nil {
 		return nil, err

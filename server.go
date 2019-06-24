@@ -45,6 +45,7 @@ import (
 	"github.com/lightningnetwork/lnd/lnwire"
 	"github.com/lightningnetwork/lnd/nat"
 	"github.com/lightningnetwork/lnd/netann"
+	"github.com/lightningnetwork/lnd/peernotifier"
 	"github.com/lightningnetwork/lnd/pool"
 	"github.com/lightningnetwork/lnd/routing"
 	"github.com/lightningnetwork/lnd/routing/route"
@@ -188,6 +189,8 @@ type server struct {
 	invoices *invoices.InvoiceRegistry
 
 	channelNotifier *channelnotifier.ChannelNotifier
+
+	peerNotifier *peernotifier.PeerNotifier
 
 	witnessBeacon contractcourt.WitnessBeacon
 
@@ -363,6 +366,8 @@ func newServer(listenAddrs []net.Addr, chanDB *channeldb.DB,
 		),
 
 		channelNotifier: channelnotifier.New(chanDB),
+
+		peerNotifier: peernotifier.New(),
 
 		identityPriv: privKey,
 		nodeSigner:   netann.NewNodeSigner(privKey),
@@ -1209,6 +1214,12 @@ func (s *server) Start() error {
 		}
 		cleanup = cleanup.add(s.backupNotifier.Stop)
 
+		if err := s.peerNotifier.Start(); err != nil {
+			startErr = err
+			return
+		}
+		cleanup = cleanup.add(s.peerNotifier.Stop)
+
 		if err := s.sphinx.Start(); err != nil {
 			startErr = err
 			return
@@ -1399,6 +1410,7 @@ func (s *server) Stop() error {
 		s.chainArb.Stop()
 		s.sweeper.Stop()
 		s.channelNotifier.Stop()
+		s.peerNotifier.Stop()
 		s.connMgr.Stop()
 		s.invoices.Stop()
 		s.fundingMgr.Stop()
@@ -2801,6 +2813,9 @@ func (s *server) peerInitializer(p *peer) {
 		}
 	}
 	delete(s.peerConnectedListeners, pubStr)
+
+	s.peerNotifier.NotifyPeerConnectionChangedEvent(pubStr,
+		p.conn.RemoteAddr().String(), true)
 }
 
 // peerTerminationWatcher waits until a peer has been disconnected unexpectedly,
@@ -2992,6 +3007,9 @@ func (s *server) removePeer(p *peer) {
 	} else {
 		delete(s.outboundPeers, pubStr)
 	}
+
+	s.peerNotifier.NotifyPeerConnectionChangedEvent(pubStr,
+		p.conn.RemoteAddr().String(), false)
 }
 
 // openChanReq is a message sent to the server in order to request the
