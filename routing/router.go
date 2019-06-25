@@ -853,7 +853,7 @@ func (r *ChannelRouter) pruneZombieChans() error {
 
 	// With the set of zombie-like channels obtained, we'll do another pass
 	// to delete them from the channel graph.
-	toPrune := make([]uint64, len(chansToPrune))
+	var toPrune []uint64
 	for chanID := range chansToPrune {
 		toPrune = append(toPrune, chanID)
 		log.Tracef("Pruning zombie channel with ChannelID(%v)", chanID)
