@@ -236,6 +236,9 @@ func Main(args []string, deps Dependencies) error {
 	if mainChain.Node == "neutrino" {
 		if deps != nil {
 			neutrinoCS = deps.ChainService()
+			if err := neutrinoCS.Start(); err != nil {
+				return err
+			}
 		}
 		if neutrinoCS == nil {
 			neutrinoBackend, neutrinoCleanUp, err := initNeutrinoBackend(
