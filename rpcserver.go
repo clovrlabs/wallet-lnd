@@ -174,10 +174,61 @@ var (
 			Entity: "address",
 			Action: "write",
 		},
-	}
+	}	
+)
 
-	// permissions maps RPC calls to the permissions they require.
-	permissions = map[string][]bakery.Op{
+// rpcServer is a gRPC, RPC front end to the lnd daemon.
+// TODO(roasbeef): pagination support for the list-style calls
+type rpcServer struct {
+	started  int32 // To be used atomically.
+	shutdown int32 // To be used atomically.
+
+	server *server
+
+	wg sync.WaitGroup
+
+	// subServers are a set of sub-RPC servers that use the same gRPC and
+	// listening sockets as the main RPC server, but which maintain their
+	// own independent service. This allows us to expose a set of
+	// micro-service like abstractions to the outside world for users to
+	// consume.
+	subServers []lnrpc.SubServer
+
+	// grpcServer is the main gRPC server that this RPC server, and all the
+	// sub-servers will use to register themselves and accept client
+	// requests from.
+	grpcServer *grpc.Server
+
+	// listenerCleanUp are a set of closures functions that will allow this
+	// main RPC server to clean up all the listening socket created for the
+	// server.
+	listenerCleanUp []func()
+
+	// restDialOpts are a set of gRPC dial options that the REST server
+	// proxy will use to connect to the main gRPC server.
+	restDialOpts []grpc.DialOption
+
+	// restProxyDest is the address to forward REST requests to.
+	restProxyDest string
+
+	// tlsCfg is the TLS config that allows the REST server proxy to
+	// connect to the main gRPC server to proxy all incoming requests.
+	tlsCfg *tls.Config
+
+	// routerBackend contains the backend implementation of the router
+	// rpc sub server.
+	routerBackend *routerrpc.RouterBackend
+
+	quit chan struct{}
+}
+
+// A compile time check to ensure that rpcServer fully implements the
+// LightningServer gRPC service.
+var _ lnrpc.LightningServer = (*rpcServer)(nil)
+
+// permissions maps RPC calls to the permissions they require.
+func initialPermissions() map[string][]bakery.Op {	
+	return map[string][]bakery.Op{
 		"/lnrpc.Lightning/SendCoins": {{
 			Entity: "onchain",
 			Action: "write",
@@ -388,57 +439,7 @@ var (
 			Action: "read",
 		}},
 	}
-)
-
-// rpcServer is a gRPC, RPC front end to the lnd daemon.
-// TODO(roasbeef): pagination support for the list-style calls
-type rpcServer struct {
-	started  int32 // To be used atomically.
-	shutdown int32 // To be used atomically.
-
-	server *server
-
-	wg sync.WaitGroup
-
-	// subServers are a set of sub-RPC servers that use the same gRPC and
-	// listening sockets as the main RPC server, but which maintain their
-	// own independent service. This allows us to expose a set of
-	// micro-service like abstractions to the outside world for users to
-	// consume.
-	subServers []lnrpc.SubServer
-
-	// grpcServer is the main gRPC server that this RPC server, and all the
-	// sub-servers will use to register themselves and accept client
-	// requests from.
-	grpcServer *grpc.Server
-
-	// listenerCleanUp are a set of closures functions that will allow this
-	// main RPC server to clean up all the listening socket created for the
-	// server.
-	listenerCleanUp []func()
-
-	// restDialOpts are a set of gRPC dial options that the REST server
-	// proxy will use to connect to the main gRPC server.
-	restDialOpts []grpc.DialOption
-
-	// restProxyDest is the address to forward REST requests to.
-	restProxyDest string
-
-	// tlsCfg is the TLS config that allows the REST server proxy to
-	// connect to the main gRPC server to proxy all incoming requests.
-	tlsCfg *tls.Config
-
-	// routerBackend contains the backend implementation of the router
-	// rpc sub server.
-	routerBackend *routerrpc.RouterBackend
-
-	quit chan struct{}
 }
-
-// A compile time check to ensure that rpcServer fully implements the
-// LightningServer gRPC service.
-var _ lnrpc.LightningServer = (*rpcServer)(nil)
-
 // newRPCServer creates and returns a new instance of the rpcServer. The
 // rpcServer will handle creating all listening sockets needed by it, and any
 // of the sub-servers that it maintains. The set of serverOpts should be the
@@ -524,6 +525,7 @@ func newRPCServer(s *server, macService *macaroons.Service,
 		subServerPerms = append(subServerPerms, macPerms)
 	}
 
+	permissions := initialPermissions()
 	// Next, we need to merge the set of sub server macaroon permissions
 	// with the main RPC server permissions so we can unite them under a
 	// single set of interceptors.
