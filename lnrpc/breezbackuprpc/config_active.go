@@ -36,5 +36,5 @@ type Config struct {
 	MacService *macaroons.Service
 
 	ChannelDB *channeldb.DB
-	WalletDB  *walletdb.DB
+	WalletDB  walletdb.DB
 }
