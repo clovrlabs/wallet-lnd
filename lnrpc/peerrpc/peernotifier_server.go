@@ -36,7 +36,7 @@ var (
 
 	// macPermissions maps RPC calls to the permissions they require.
 	macPermissions = map[string][]bakery.Op{
-		"/peerrpc.PeerNotifier/SubscribePeerNotifications": {{
+		"/peerrpc.PeerNotifier/SubscribePeers": {{
 			Entity: "offchain",
 			Action: "read",
 		}},
