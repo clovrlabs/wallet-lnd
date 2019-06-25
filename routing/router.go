@@ -742,7 +742,7 @@ func (r *ChannelRouter) syncGraphWithChain() error {
 // usually signals that a channel has been closed on-chain. We do this
 // periodically to keep a healthy, lively routing table.
 func (r *ChannelRouter) pruneZombieChans() error {
-	var chansToPrune map[uint64]bool
+	chansToPrune := make(map[uint64]bool)
 	chanExpiry := r.cfg.ChannelPruneExpiry
 
 	log.Infof("Examining channel graph for zombie channels")
