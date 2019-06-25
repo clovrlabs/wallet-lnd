@@ -742,7 +742,7 @@ func (r *ChannelRouter) syncGraphWithChain() error {
 // usually signals that a channel has been closed on-chain. We do this
 // periodically to keep a healthy, lively routing table.
 func (r *ChannelRouter) pruneZombieChans() error {
-	var chansToPrune []uint64
+	var chansToPrune map[uint64]bool
 	chanExpiry := r.cfg.ChannelPruneExpiry
 
 	log.Infof("Examining channel graph for zombie channels")
@@ -817,7 +817,7 @@ func (r *ChannelRouter) pruneZombieChans() error {
 			info.ChannelID)
 
 		// TODO(roasbeef): add ability to delete single directional edge
-		chansToPrune = append(chansToPrune, info.ChannelID)
+		chansToPrune[info.ChannelID] = true
 
 		return nil
 	}
@@ -853,10 +853,12 @@ func (r *ChannelRouter) pruneZombieChans() error {
 
 	// With the set of zombie-like channels obtained, we'll do another pass
 	// to delete them from the channel graph.
-	for _, chanID := range chansToPrune {
+	toPrune := make([]uint64, len(chansToPrune))
+	for chanID := range chansToPrune {
+		toPrune = append(toPrune, chanID)
 		log.Tracef("Pruning zombie channel with ChannelID(%v)", chanID)
 	}
-	if err := r.cfg.Graph.DeleteChannelEdges(chansToPrune...); err != nil {
+	if err := r.cfg.Graph.DeleteChannelEdges(toPrune...); err != nil {
 		return fmt.Errorf("unable to delete zombie channels: %v", err)
 	}
 
