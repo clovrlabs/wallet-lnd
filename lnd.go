@@ -198,7 +198,7 @@ func Main(args []string, deps Dependencies) error {
 	// Open the channeldb, which is dedicated to storing channel, and
 	// network related metadata.
 	if chanDB == nil {
-		chanDB, err := channeldb.Open(
+		chanDB, err = channeldb.Open(
 			graphDir,
 			channeldb.OptionSetRejectCacheSize(cfg.Caches.RejectCacheSize),
 			channeldb.OptionSetChannelCacheSize(cfg.Caches.ChannelCacheSize),
@@ -244,10 +244,11 @@ func Main(args []string, deps Dependencies) error {
 			neutrinoBackend, neutrinoCleanUp, err := initNeutrinoBackend(
 				mainChain.ChainDir,
 			)
-			defer neutrinoCleanUp()
+
 			if err != nil {
 				return err
 			}
+			defer neutrinoCleanUp()
 			neutrinoCS = neutrinoBackend
 		}
 	}
