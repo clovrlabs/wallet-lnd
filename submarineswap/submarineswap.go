@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	defaultLockHeight      = 144
+	defaultLockHeight      = 288
 	redeemWitnessInputSize = 1 + 1 + 73 + 1 + 32 + 1 + 100
 	refundWitnessInputSize = 1 + 1 + 73 + 1 + 0 + 1 + 100
 )
