@@ -1705,6 +1705,12 @@ func (r *rpcServer) CloseChannel(in *lnrpc.CloseChannelRequest,
 		return fmt.Errorf("must specify channel point in close channel")
 	}
 
+	// If force closing a channel, the fee set in the commitment transaction
+	// is used.
+	if in.Force && (in.SatPerByte != 0 || in.TargetConf != 0) {
+		return fmt.Errorf("force closing a channel uses a pre-defined fee")
+	}
+
 	force := in.Force
 	index := in.ChannelPoint.OutputIndex
 	txid, err := GetChanPointFundingTxid(in.GetChannelPoint())
@@ -3154,6 +3160,8 @@ func (r *rpcServer) dispatchPaymentIntent(
 	// If the route failed, then we'll return a nil save err, but a non-nil
 	// routing err.
 	if routerErr != nil {
+		rpcsLog.Warnf("Unable to send payment: %v", routerErr)
+
 		return &paymentIntentResponse{
 			Err: routerErr,
 		}, nil
