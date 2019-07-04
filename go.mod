@@ -54,4 +54,4 @@ replace github.com/lightningnetwork/lnd/ticker => ./ticker
 
 replace github.com/lightningnetwork/lnd/queue => ./queue
 
-replace github.com/btcsuite/btcwallet v0.0.0-20190524003533-2c05240dff28 => github.com/breez/btcwallet v0.0.0-20190528064315-94c4029981be
+replace github.com/btcsuite/btcwallet v0.0.0-20190628225330-4a9774585e57 => github.com/breez/btcwallet v0.0.0-20190703105141-dad0cf7525f1
