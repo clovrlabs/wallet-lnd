@@ -53,3 +53,5 @@ require (
 replace github.com/lightningnetwork/lnd/ticker => ./ticker
 
 replace github.com/lightningnetwork/lnd/queue => ./queue
+
+replace github.com/btcsuite/btcwallet v0.0.0-20190628225330-4a9774585e57 => github.com/breez/btcwallet v0.0.0-20190703105141-dad0cf7525f1
