@@ -366,11 +366,11 @@ func (s *Server) SubSwapServiceRedeem(ctx context.Context,
 func (s *Server) SubSwapClientRefund(ctx context.Context,
 	in *SubSwapClientRefundRequest) (*SubSwapClientRefundResponse, error) {
 
-	address, err := btcutil.DecodeAddress(in.Address, nil)
+	address, err := btcutil.DecodeAddress(in.Address, s.cfg.ActiveNetParams)
 	if err != nil {
 		return nil, err
 	}
-	refundAddress, err := btcutil.DecodeAddress(in.RefundAddress, nil)
+	refundAddress, err := btcutil.DecodeAddress(in.RefundAddress, s.cfg.ActiveNetParams)
 	if err != nil {
 		return nil, err
 	}
