@@ -50,4 +50,8 @@ require (
 	gopkg.in/mgo.v2 v2.0.0-20180705113604-9856a29383ce // indirect
 )
 
+replace github.com/lightningnetwork/lnd/ticker => ./ticker
+
+replace github.com/lightningnetwork/lnd/queue => ./queue
+
 replace github.com/btcsuite/btcwallet v0.0.0-20190628225330-4a9774585e57 => github.com/breez/btcwallet v0.0.0-20190703105141-dad0cf7525f1
