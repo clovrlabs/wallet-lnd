@@ -3697,6 +3697,7 @@ func (lc *LightningChannel) validateCommitmentSanity(theirLogCounter,
 	ourLogCounter uint64, remoteChain bool,
 	predictAdded *PaymentDescriptor) error {
 
+	walletLog.Infof("validateCommitmentSanity started...")
 	// Fetch all updates not committed.
 	view := lc.fetchHTLCView(theirLogCounter, ourLogCounter)
 
@@ -3716,10 +3717,13 @@ func (lc *LightningChannel) validateCommitmentSanity(theirLogCounter,
 	ourInitialBalance := commitChain.tip().ourBalance
 	theirInitialBalance := commitChain.tip().theirBalance
 
+	walletLog.Infof("validateCommitmentSanity ourInitialBalance=%v, theirInitialBalance=%v", ourInitialBalance, theirInitialBalance)
 	ourBalance, theirBalance, commitWeight, filteredView := lc.computeView(
 		view, remoteChain, false,
 	)
+	walletLog.Infof("validateCommitmentSanity after computing view")
 	feePerKw := filteredView.feePerKw
+	walletLog.Infof("validateCommitmentSanity ourBalance=%v, theirBalance=%v, feePerKw=%v", ourBalance, theirBalance, feePerKw)
 
 	// Calculate the commitment fee, and subtract it from the initiator's
 	// balance.
@@ -3731,14 +3735,18 @@ func (lc *LightningChannel) validateCommitmentSanity(theirLogCounter,
 		theirBalance -= commitFeeMsat
 	}
 
+	walletLog.Infof("validateCommitmentSanity commitFee=%v, ourBalance=%v, theirBalance=%v", commitFee, ourBalance, theirBalance)
+
 	// As a quick sanity check, we'll ensure that if we interpret the
 	// balances as signed integers, they haven't dipped down below zero. If
 	// they have, then this indicates that a party doesn't have sufficient
 	// balance to satisfy the final evaluated HTLC's.
 	switch {
 	case int64(ourBalance) < 0:
+		walletLog.Infof("ourBalance is less than zero")
 		return ErrBelowChanReserve
 	case int64(theirBalance) < 0:
+		walletLog.Infof("theirBalance is less than zero")
 		return ErrBelowChanReserve
 	}
 
@@ -3747,12 +3755,14 @@ func (lc *LightningChannel) validateCommitmentSanity(theirLogCounter,
 	if ourBalance < ourInitialBalance &&
 		ourBalance < lnwire.NewMSatFromSatoshis(
 			lc.localChanCfg.ChanReserve) {
+		walletLog.Infof("ourBalance is less than chanReserve which is %v", lc.localChanCfg.ChanReserve)
 		return ErrBelowChanReserve
 	}
 
 	if theirBalance < theirInitialBalance &&
 		theirBalance < lnwire.NewMSatFromSatoshis(
 			lc.remoteChanCfg.ChanReserve) {
+		walletLog.Infof("theirBalance is less than chanReserve which is %v", lc.remoteChanCfg.ChanReserve)
 		return ErrBelowChanReserve
 	}
 
