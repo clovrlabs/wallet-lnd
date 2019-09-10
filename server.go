@@ -1032,7 +1032,11 @@ func newServer(listenAddrs []net.Addr, chanDB *channeldb.DB,
 			// times. If this value ends up dipping below the dust
 			// limit, then we'll use the dust limit itself as the
 			// reserve as required by BOLT #2.
-			reserve := chanAmt / 100
+			defaultReserve := chanAmt / 100
+			reserve, err := requiredRemoteChanReserve(chainCfg, chanAmt, defaultReserve)
+			if err != nil {
+				srvrLog.Errorf("requiredRemoteChanReserve error: %v", err)
+			}
 			if reserve < dustLimit {
 				reserve = dustLimit
 			}
