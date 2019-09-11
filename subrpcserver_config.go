@@ -255,6 +255,9 @@ func (s *subRPCServerConfigs) PopulateDependencies(cc *chainControl,
 		case *watchtowerrpc.Config:
 			subCfgValue := extractReflectValue(subCfg)
 
+			subCfgValue.FieldByName("Active").Set(
+				reflect.ValueOf(tower != nil),
+			)
 			subCfgValue.FieldByName("Tower").Set(
 				reflect.ValueOf(tower),
 			)

@@ -119,15 +119,15 @@ var (
 	zombieBucket = []byte("zombie-index")
 
 	// disabledEdgePolicyBucket is a sub-bucket of the main edgeBucket bucket
-	// responsible for maintaining an index of disabled edge policies.
-	// Each entry exists within the bucket as follows:
+	// responsible for maintaining an index of disabled edge policies. Each
+	// entry exists within the bucket as follows:
 	//
-	// maps: <chanID><direction> -> nil
+	// maps: <chanID><direction> -> []byte{}
 	//
 	// The chanID represents the channel ID of the edge and the direction is
-	// one byte representing the direction of the edge.
-	// The main purpose of this index is to allow pruning disabled channels
-	// In a fast way without the need to iterate all over the graph.
+	// one byte representing the direction of the edge. The main purpose of
+	// this index is to allow pruning disabled channels in a fast way without
+	// the need to iterate all over the graph.
 	disabledEdgePolicyBucket = []byte("disabled-edge-policy-index")
 
 	// graphMetaBucket is a top-level bucket which stores various meta-deta
@@ -248,18 +248,39 @@ func (c *ChannelGraph) ForEachChannel(cb func(*ChannelEdgeInfo, *ChannelEdgePoli
 	})
 }
 
+// ForEachNodeChannel iterates through all channels of a given node, executing the
+// passed callback with an edge info structure and the policies of each end
+// of the channel. The first edge policy is the outgoing edge *to* the
+// the connecting node, while the second is the incoming edge *from* the
+// connecting node. If the callback returns an error, then the iteration is
+// halted with the error propagated back up to the caller.
+//
+// Unknown policies are passed into the callback as nil values.
+//
+// If the caller wishes to re-use an existing boltdb transaction, then it
+// should be passed as the first argument.  Otherwise the first argument should
+// be nil and a fresh transaction will be created to execute the graph
+// traversal.
+func (c *ChannelGraph) ForEachNodeChannel(tx *bbolt.Tx, nodePub []byte,
+	cb func(*bbolt.Tx, *ChannelEdgeInfo, *ChannelEdgePolicy,
+		*ChannelEdgePolicy) error) error {
+
+	db := c.db
+
+	return nodeTraversal(tx, nodePub, db, cb)
+}
+
 // DisabledChannelIDs returns the channel ids of disabled channels.
 // A channel is disabled when two of the associated ChanelEdgePolicies
 // have their disabled bit on.
 func (c *ChannelGraph) DisabledChannelIDs() ([]uint64, error) {
-
 	var disabledChanIDs []uint64
-	chanEdgeFound := make(map[uint64]bool)
+	chanEdgeFound := make(map[uint64]struct{})
 
 	err := c.db.View(func(tx *bbolt.Tx) error {
 		edges := tx.Bucket(edgeBucket)
 		if edges == nil {
-			return nil
+			return ErrGraphNoEdgesFound
 		}
 
 		disabledEdgePolicyIndex := edges.Bucket(disabledEdgePolicyBucket)
@@ -269,21 +290,24 @@ func (c *ChannelGraph) DisabledChannelIDs() ([]uint64, error) {
 
 		// We iterate over all disabled policies and we add each channel that
 		// has more than one disabled policy to disabledChanIDs array.
-		disabledEdgePolicyIndex.ForEach(func(k, v []byte) error {
+		return disabledEdgePolicyIndex.ForEach(func(k, v []byte) error {
 			chanID := byteOrder.Uint64(k[:8])
-			if chanEdgeFound[chanID] {
+			_, edgeFound := chanEdgeFound[chanID]
+			if edgeFound {
 				delete(chanEdgeFound, chanID)
 				disabledChanIDs = append(disabledChanIDs, chanID)
 				return nil
 			}
 
-			chanEdgeFound[chanID] = true
+			chanEdgeFound[chanID] = struct{}{}
 			return nil
 		})
-		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
 
-	return disabledChanIDs, err
+	return disabledChanIDs, nil
 }
 
 // ForEachNode iterates through all the stored vertices/nodes in the graph,
@@ -1850,6 +1874,8 @@ func delChannelEdge(edges, edgeIndex, chanIndex, zombieIndex,
 		}
 	}
 
+	// As part of deleting the edge we also remove all disabled entries
+	// from the edgePolicyDisabledIndex bucket. We do that for both directions.
 	updateEdgePolicyDisabledIndex(edges, cid, false, false)
 	updateEdgePolicyDisabledIndex(edges, cid, true, false)
 
@@ -2236,23 +2262,10 @@ func (c *ChannelGraph) HasLightningNode(nodePub [33]byte) (time.Time, bool, erro
 	return updateTime, exists, nil
 }
 
-// ForEachChannel iterates through all channels of this node, executing the
-// passed callback with an edge info structure and the policies of each end
-// of the channel. The first edge policy is the outgoing edge *to* the
-// the connecting node, while the second is the incoming edge *from* the
-// connecting node. If the callback returns an error, then the iteration is
-// halted with the error propagated back up to the caller.
-//
-// Unknown policies are passed into the callback as nil values.
-//
-// If the caller wishes to re-use an existing boltdb transaction, then it
-// should be passed as the first argument.  Otherwise the first argument should
-// be nil and a fresh transaction will be created to execute the graph
-// traversal.
-func (l *LightningNode) ForEachChannel(tx *bbolt.Tx,
+// nodeTraversal is used to traverse all channels of a node given by its
+// public key and passes channel information into the specified callback.
+func nodeTraversal(tx *bbolt.Tx, nodePub []byte, db *DB,
 	cb func(*bbolt.Tx, *ChannelEdgeInfo, *ChannelEdgePolicy, *ChannelEdgePolicy) error) error {
-
-	nodePub := l.PubKeyBytes[:]
 
 	traversal := func(tx *bbolt.Tx) error {
 		nodes := tx.Bucket(nodeBucket)
@@ -2294,7 +2307,7 @@ func (l *LightningNode) ForEachChannel(tx *bbolt.Tx,
 			if err != nil {
 				return err
 			}
-			edgeInfo.db = l.db
+			edgeInfo.db = db
 
 			outgoingPolicy, err := fetchChanEdgePolicy(
 				edges, chanID, nodePub, nodes,
@@ -2309,7 +2322,7 @@ func (l *LightningNode) ForEachChannel(tx *bbolt.Tx,
 			}
 
 			incomingPolicy, err := fetchChanEdgePolicy(
-				edges, chanID, otherNode, nodes,
+				edges, chanID, otherNode[:], nodes,
 			)
 			if err != nil {
 				return err
@@ -2328,12 +2341,34 @@ func (l *LightningNode) ForEachChannel(tx *bbolt.Tx,
 	// If no transaction was provided, then we'll create a new transaction
 	// to execute the transaction within.
 	if tx == nil {
-		return l.db.View(traversal)
+		return db.View(traversal)
 	}
 
 	// Otherwise, we re-use the existing transaction to execute the graph
 	// traversal.
 	return traversal(tx)
+}
+
+// ForEachChannel iterates through all channels of this node, executing the
+// passed callback with an edge info structure and the policies of each end
+// of the channel. The first edge policy is the outgoing edge *to* the
+// the connecting node, while the second is the incoming edge *from* the
+// connecting node. If the callback returns an error, then the iteration is
+// halted with the error propagated back up to the caller.
+//
+// Unknown policies are passed into the callback as nil values.
+//
+// If the caller wishes to re-use an existing boltdb transaction, then it
+// should be passed as the first argument.  Otherwise the first argument should
+// be nil and a fresh transaction will be created to execute the graph
+// traversal.
+func (l *LightningNode) ForEachChannel(tx *bbolt.Tx,
+	cb func(*bbolt.Tx, *ChannelEdgeInfo, *ChannelEdgePolicy, *ChannelEdgePolicy) error) error {
+
+	nodePub := l.PubKeyBytes[:]
+	db := l.db
+
+	return nodeTraversal(tx, nodePub, db, cb)
 }
 
 // ChannelEdgeInfo represents a fully authenticated channel along with all its
@@ -2503,15 +2538,15 @@ func (c *ChannelEdgeInfo) BitcoinKey2() (*btcec.PublicKey, error) {
 // OtherNodeKeyBytes returns the node key bytes of the other end of
 // the channel.
 func (c *ChannelEdgeInfo) OtherNodeKeyBytes(thisNodeKey []byte) (
-	[]byte, error) {
+	[33]byte, error) {
 
 	switch {
 	case bytes.Equal(c.NodeKey1Bytes[:], thisNodeKey):
-		return c.NodeKey2Bytes[:], nil
+		return c.NodeKey2Bytes, nil
 	case bytes.Equal(c.NodeKey2Bytes[:], thisNodeKey):
-		return c.NodeKey1Bytes[:], nil
+		return c.NodeKey1Bytes, nil
 	default:
-		return nil, fmt.Errorf("node not participating in this channel")
+		return [33]byte{}, fmt.Errorf("node not participating in this channel")
 	}
 }
 
@@ -3217,6 +3252,31 @@ func isZombieEdge(zombieIndex *bbolt.Bucket,
 	return true, pubKey1, pubKey2
 }
 
+// NumZombies returns the current number of zombie channels in the graph.
+func (c *ChannelGraph) NumZombies() (uint64, error) {
+	var numZombies uint64
+	err := c.db.View(func(tx *bbolt.Tx) error {
+		edges := tx.Bucket(edgeBucket)
+		if edges == nil {
+			return nil
+		}
+		zombieIndex := edges.Bucket(zombieBucket)
+		if zombieIndex == nil {
+			return nil
+		}
+
+		return zombieIndex.ForEach(func(_, _ []byte) error {
+			numZombies++
+			return nil
+		})
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	return numZombies, nil
+}
+
 func putLightningNode(nodeBucket *bbolt.Bucket, aliasBucket *bbolt.Bucket,
 	updateIndex *bbolt.Bucket, node *LightningNode) error {
 
@@ -3669,32 +3729,45 @@ func putChanEdgePolicy(edges, nodes *bbolt.Bucket, edge *ChannelEdgePolicy,
 		return err
 	}
 
-	updateEdgePolicyDisabledIndex(edges, edge.ChannelID,
-		edge.ChannelFlags&lnwire.ChanUpdateDirection > 0, edge.IsDisabled())
+	updateEdgePolicyDisabledIndex(
+		edges, edge.ChannelID,
+		edge.ChannelFlags&lnwire.ChanUpdateDirection > 0,
+		edge.IsDisabled(),
+	)
 
 	return edges.Put(edgeKey[:], b.Bytes()[:])
 }
 
+// updateEdgePolicyDisabledIndex is used to update the disabledEdgePolicyIndex
+// bucket by either add a new disabled ChannelEdgePolicy or remove an existing
+// one.
+// The direction represents the direction of the edge and disabled is used for
+// deciding whether to remove or add an entry to the bucket.
+// In general a channel is disabled if two entries for the same chanID exist
+// in this bucket.
+// Maintaining the bucket this way allows a fast retrieval of disabled
+// channels, for example when prune is needed.
 func updateEdgePolicyDisabledIndex(edges *bbolt.Bucket, chanID uint64,
-	initiator bool, disabled bool) error {
+	direction bool, disabled bool) error {
 
 	var disabledEdgeKey [8 + 1]byte
 	byteOrder.PutUint64(disabledEdgeKey[0:], chanID)
-	if initiator {
+	if direction {
 		disabledEdgeKey[8] = 1
 	}
 
-	disabledEdgePolicyIndex, err := edges.CreateBucketIfNotExists(disabledEdgePolicyBucket)
+	disabledEdgePolicyIndex, err := edges.CreateBucketIfNotExists(
+		disabledEdgePolicyBucket,
+	)
 	if err != nil {
 		return err
 	}
 
 	if disabled {
-		err = disabledEdgePolicyIndex.Put(disabledEdgeKey[:], nil)
-	} else {
-		err = disabledEdgePolicyIndex.Delete(disabledEdgeKey[:])
+		return disabledEdgePolicyIndex.Put(disabledEdgeKey[:], []byte{})
 	}
-	return err
+
+	return disabledEdgePolicyIndex.Delete(disabledEdgeKey[:])
 }
 
 // putChanEdgePolicyUnknown marks the edge policy as unknown
