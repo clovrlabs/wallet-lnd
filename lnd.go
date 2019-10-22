@@ -123,14 +123,24 @@ type Dependencies interface {
 	ReadyChan() chan interface{}
 	LogPipeWriter() *io.PipeWriter
 	ChainService() *neutrino.ChainService
+	ChanDB() *channeldb.DB
 }
 
 // Main is the true entry point for lnd. This function is required since defers
 // created in the top-level scope of a main method aren't executed if os.Exit()
 // is called.
-func Main(lisCfg ListenerCfg, deps Dependencies) error {
-	readyChan := deps.ReadyChan()
-	logWriter.RotatorPipe = deps.LogPipeWriter()
+func Main(lisCfg ListenerCfg, args []string, deps Dependencies) error {
+	var readyChan chan interface{}
+	var chanDB *channeldb.DB
+
+	if deps != nil {
+		readyChan = deps.ReadyChan()
+		logWriter.RotatorPipe = deps.LogPipeWriter()
+		chanDB = deps.ChanDB()
+	}
+	if args != nil {
+		os.Args = args
+	}
 
 	// Load the configuration, and parse any command line options. This
 	// function will also set up logging properly.
@@ -202,18 +212,19 @@ func Main(lisCfg ListenerCfg, deps Dependencies) error {
 
 	// Open the channeldb, which is dedicated to storing channel, and
 	// network related metadata.
-	chanDB, err := channeldb.Open(
-		graphDir,
-		channeldb.OptionSetRejectCacheSize(cfg.Caches.RejectCacheSize),
-		channeldb.OptionSetChannelCacheSize(cfg.Caches.ChannelCacheSize),
-		channeldb.OptionSetSyncFreelist(cfg.SyncFreelist),
-	)
-	if err != nil {
-		err := fmt.Errorf("Unable to open channeldb: %v", err)
-		ltndLog.Error(err)
-		return err
+	if chanDB == nil {
+		chanDB, err = channeldb.Open(
+			graphDir,
+			channeldb.OptionSetRejectCacheSize(cfg.Caches.RejectCacheSize),
+			channeldb.OptionSetChannelCacheSize(cfg.Caches.ChannelCacheSize),
+			channeldb.OptionSetSyncFreelist(cfg.SyncFreelist),
+		)
+		if err != nil {
+			err := fmt.Errorf("Unable to open channeldb: %v", err)
+			ltndLog.Error(err)
+			return err
+		}
 	}
-	defer chanDB.Close()
 
 	// Only process macaroons if --no-macaroons isn't set.
 	ctx := context.Background()
@@ -254,6 +265,9 @@ func Main(lisCfg ListenerCfg, deps Dependencies) error {
 	if mainChain.Node == "neutrino" {
 		if deps != nil {
 			neutrinoCS = deps.ChainService()
+			if err := neutrinoCS.Start(); err != nil {
+				return err
+			}
 		}
 		if neutrinoCS == nil {
 			neutrinoBackend, neutrinoCleanUp, err := initNeutrinoBackend(
@@ -736,17 +750,20 @@ func getTLSConfig(tlsCertPath string, tlsKeyPath string, tlsExtraIPs,
 		return nil, nil, "", err
 	}
 
-	restProxyDest := rpcListeners[0].String()
-	switch {
-	case strings.Contains(restProxyDest, "0.0.0.0"):
-		restProxyDest = strings.Replace(
-			restProxyDest, "0.0.0.0", "127.0.0.1", 1,
-		)
+	var restProxyDest string
+	if len(cfg.RPCListeners) > 0 {
+		restProxyDest = cfg.RPCListeners[0].String()
+		switch {
+		case strings.Contains(restProxyDest, "0.0.0.0"):
+			restProxyDest = strings.Replace(
+				restProxyDest, "0.0.0.0", "127.0.0.1", 1,
+			)
 
-	case strings.Contains(restProxyDest, "[::]"):
-		restProxyDest = strings.Replace(
-			restProxyDest, "[::]", "[::1]", 1,
-		)
+		case strings.Contains(restProxyDest, "[::]"):
+			restProxyDest = strings.Replace(
+				restProxyDest, "[::]", "[::1]", 1,
+			)
+		}
 	}
 
 	return tlsCfg, &restCreds, restProxyDest, nil
