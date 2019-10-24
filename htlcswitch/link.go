@@ -271,6 +271,7 @@ type ChannelLinkConfig struct {
 	// NotifyInactiveChannel allows the switch to tell the ChannelNotifier
 	// when channels become inactive.
 	NotifyInactiveChannel func(wire.OutPoint)
+	OnCommitmentRevoked func()
 }
 
 // channelLink is the service which drives a channel's commitment update
@@ -1762,6 +1763,7 @@ func (l *channelLink) handleUpstreamMsg(msg lnwire.Message) {
 			return
 		}
 		l.cfg.Peer.SendMessage(false, nextRevocation)
+		l.cfg.OnCommitmentRevoked()
 
 		// Since we just revoked our commitment, we may have a new set
 		// of HTLC's on our commitment, so we'll send them over our
@@ -1868,6 +1870,7 @@ func (l *channelLink) handleUpstreamMsg(msg lnwire.Message) {
 		if l.failed {
 			return
 		}
+		l.cfg.OnCommitmentRevoked()
 
 		if needUpdate {
 			if err := l.updateCommitTx(); err != nil {
