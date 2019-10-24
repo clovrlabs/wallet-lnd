@@ -39,7 +39,7 @@ type backupResult struct {
 	err  error
 }
 
-func Backup(chainParams *chaincfg.Params, channelDB *channeldb.DB, walletDB *walletdb.DB) ([]string, error) {
+func Backup(chainParams *chaincfg.Params, channelDB *channeldb.DB, walletDB walletdb.DB) ([]string, error) {
 
 	fmt.Println("Backup started at: ", time.Now())
 	dir, err := ioutil.TempDir("", "backup")
@@ -70,7 +70,7 @@ func Backup(chainParams *chaincfg.Params, channelDB *channeldb.DB, walletDB *wal
 	return []string{channeldbPath, walletdbPath}, err
 }
 
-func backupWalletdb(chainParams *chaincfg.Params, walletDB *walletdb.DB, destFile string) error {
+func backupWalletdb(chainParams *chaincfg.Params, walletDB walletdb.DB, destFile string) error {
 	walletCopy, err := walletdbCopy(filepath.Dir(destFile), walletDB)
 	if err != nil {
 		return err
@@ -142,14 +142,14 @@ func dropSyncedBlock(chainParams *chaincfg.Params, wallet string) error {
 	return nil
 }
 
-func walletdbCopy(dir string, walletDB *walletdb.DB) (string, error) {
+func walletdbCopy(dir string, walletDB walletdb.DB) (string, error) {
 	walletCopy := filepath.Join(dir, "wallet-temp.db")
 	f1, err := os.Create(walletCopy)
 	if err != nil {
 		return "", err
 	}
 	defer f1.Close()
-	err = (*walletDB).Copy(f1)
+	err = walletDB.Copy(f1)
 	if err != nil {
 		return "", err
 	}

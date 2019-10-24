@@ -97,7 +97,7 @@ func New(cfg *Config) (*Server, lnrpc.MacaroonPerms, error) {
 		if err != nil {
 			return nil, nil, err
 		}
-		breezBackupMacBytes, err := breezBackuipMac.M().MarshalBinary()
+		breezBackupMacBytes, err := breezBackupMac.M().MarshalBinary()
 		if err != nil {
 			return nil, nil, err
 		}
