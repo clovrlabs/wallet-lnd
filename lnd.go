@@ -133,6 +133,12 @@ func Main(lisCfg ListenerCfg, args []string, deps Dependencies) error {
 	var readyChan chan interface{}
 	var chanDB *channeldb.DB
 
+	//Start the signal that is responsible for shutdown
+	if err := signal.Start(); err != nil {
+		ltndLog.Errorf("failed to start signal %v", err)
+		return err
+	}
+	
 	if deps != nil {
 		readyChan = deps.ReadyChan()
 		logWriter.RotatorPipe = deps.LogPipeWriter()
