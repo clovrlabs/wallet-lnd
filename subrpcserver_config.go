@@ -18,11 +18,8 @@ import (
 	"github.com/lightningnetwork/lnd/lnrpc/signrpc"
 	"github.com/lightningnetwork/lnd/lnrpc/walletrpc"
 	"github.com/lightningnetwork/lnd/lnrpc/watchtowerrpc"
-<<<<<<< HEAD
 	"github.com/lightningnetwork/lnd/lnrpc/wtclientrpc"
-=======
 	"github.com/lightningnetwork/lnd/lnwallet/btcwallet"
->>>>>>> Add breez_backup subrpc server
 	"github.com/lightningnetwork/lnd/macaroons"
 	"github.com/lightningnetwork/lnd/netann"
 	"github.com/lightningnetwork/lnd/routing"
@@ -71,15 +68,12 @@ type subRPCServerConfigs struct {
 	// clients to monitor and control their embedded watchtower.
 	WatchtowerRPC *watchtowerrpc.Config `group:"watchtowerrpc" namespace:"watchtowerrpc"`
 
-<<<<<<< HEAD
 	// WatchtowerClientRPC is a sub-RPC server that exposes functionality
 	// that allows clients to interact with the active watchtower client
 	// instance within lnd in order to add, remove, list registered client
 	// towers, etc.
 	WatchtowerClientRPC *wtclientrpc.Config `group:"wtclientrpc" namespace:"wtclientrpc"`
-=======
 	BreezBackupRPC *breezbackuprpc.Config `group:"breezbackuprpc" namespace:"breezbackuprpc"`
->>>>>>> Add breez_backup subrpc server
 }
 
 // PopulateDependencies attempts to iterate through all the sub-server configs
@@ -246,7 +240,6 @@ func (s *subRPCServerConfigs) PopulateDependencies(cc *chainControl,
 				reflect.ValueOf(tower),
 			)
 
-<<<<<<< HEAD
 		case *wtclientrpc.Config:
 			subCfgValue := extractReflectValue(subCfg)
 
@@ -260,7 +253,6 @@ func (s *subRPCServerConfigs) PopulateDependencies(cc *chainControl,
 			}
 			subCfgValue.FieldByName("Resolver").Set(
 				reflect.ValueOf(tcpResolver),
-=======
 		case *breezbackuprpc.Config:
 			subCfgValue := extractReflectValue(subCfg)
 
@@ -278,7 +270,6 @@ func (s *subRPCServerConfigs) PopulateDependencies(cc *chainControl,
 			)
 			subCfgValue.FieldByName("WalletDB").Set(
 				reflect.ValueOf(cc.wallet.WalletController.(*btcwallet.BtcWallet).InternalWallet().Database()),
->>>>>>> Add breez_backup subrpc server
 			)
 
 		default:
