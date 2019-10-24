@@ -60,4 +60,6 @@ replace github.com/lightningnetwork/lnd/queue => ./queue
 
 replace git.schwanenlied.me/yawning/bsaes.git => github.com/Yawning/bsaes v0.0.0-20180720073208-c0276d75487e
 
+replace github.com/btcsuite/btcwallet v0.10.0 => github.com/breez/btcwallet v0.10.1-0.20191024084108-c6fa155e736a
+
 go 1.12
