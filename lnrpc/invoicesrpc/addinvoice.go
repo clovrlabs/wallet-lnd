@@ -91,6 +91,10 @@ type AddInvoiceData struct {
 	// Whether this invoice should include routing hints for private
 	// channels.
 	Private bool
+
+	// Optional route hints that can each be individually used to assist in
+	// reaching the invoice's destination.
+	RouteHints [][]zpay32.HopHint
 }
 
 // AddInvoice attempts to add a new invoice to the invoice database. Any
@@ -264,12 +268,27 @@ func AddInvoice(ctx context.Context, cfg *AddInvoiceConfig,
 
 		graph := cfg.ChanDB.ChannelGraph()
 
-		numHints := 0
+		// We start by populating the requested routing hints marking their
+		// channels as used so we won't duplicate them.
+		usedChannels := make(map[uint64]struct{})
+		for i, h := range invoice.RouteHints {
+			if i >= 20 {
+				break
+			}
+			options = append(options, zpay32.RouteHint(h))
+			usedChannels[h[0].ChannelID] = struct{}{}
+		}
+
 		for _, channel := range openChannels {
 			// We'll restrict the number of individual route hints
 			// to 20 to avoid creating overly large invoices.
-			if numHints >= 20 {
+			if len(usedChannels) >= 20 {
 				break
+			}
+
+			// If we already used this channel for routing hints.
+			if _, ok := usedChannels[channel.ShortChannelID.ToUint64()]; ok {
+				continue
 			}
 
 			// Since we're only interested in our private channels,
@@ -366,7 +385,7 @@ func AddInvoice(ctx context.Context, cfg *AddInvoiceConfig,
 			routeHint := []zpay32.HopHint{hint}
 			options = append(options, zpay32.RouteHint(routeHint))
 
-			numHints++
+			usedChannels[chanID] = struct{}{}
 		}
 
 	}
