@@ -589,7 +589,9 @@ func (c *OpenChannel) hasChanStatus(status ChannelStatus) bool {
 }
 
 // RefreshShortChanID updates the in-memory short channel ID using the latest
-// value observed on disk.
+// value observed on disk. Since a new short channel ID is a result of a
+// funding tx confirmation, we also update the IsPending value that might have
+// been changed as well.
 func (c *OpenChannel) RefreshShortChanID() error {
 	c.Lock()
 	defer c.Unlock()
