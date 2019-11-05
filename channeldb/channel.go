@@ -589,12 +589,15 @@ func (c *OpenChannel) hasChanStatus(status ChannelStatus) bool {
 }
 
 // RefreshShortChanID updates the in-memory short channel ID using the latest
-// value observed on disk.
+// value observed on disk. Since a new short channel ID is a result of a
+// funding tx confirmation, we also update the IsPending value that might have
+// been changed as well.
 func (c *OpenChannel) RefreshShortChanID() error {
 	c.Lock()
 	defer c.Unlock()
 
 	var sid lnwire.ShortChannelID
+	var isPending bool
 	err := c.Db.View(func(tx *bbolt.Tx) error {
 		chanBucket, err := fetchChanBucket(
 			tx, c.IdentityPub, &c.FundingOutpoint, c.ChainHash,
@@ -609,6 +612,7 @@ func (c *OpenChannel) RefreshShortChanID() error {
 		}
 
 		sid = channel.ShortChannelID
+		isPending = channel.IsPending
 
 		return nil
 	})
@@ -617,6 +621,7 @@ func (c *OpenChannel) RefreshShortChanID() error {
 	}
 
 	c.ShortChannelID = sid
+	c.IsPending = isPending
 	c.Packager = NewChannelPackager(sid)
 
 	return nil
