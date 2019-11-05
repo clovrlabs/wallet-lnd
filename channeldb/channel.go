@@ -595,6 +595,7 @@ func (c *OpenChannel) RefreshShortChanID() error {
 	defer c.Unlock()
 
 	var sid lnwire.ShortChannelID
+	var isPending bool
 	err := c.Db.View(func(tx *bbolt.Tx) error {
 		chanBucket, err := fetchChanBucket(
 			tx, c.IdentityPub, &c.FundingOutpoint, c.ChainHash,
@@ -609,6 +610,7 @@ func (c *OpenChannel) RefreshShortChanID() error {
 		}
 
 		sid = channel.ShortChannelID
+		isPending = channel.IsPending
 
 		return nil
 	})
@@ -617,6 +619,7 @@ func (c *OpenChannel) RefreshShortChanID() error {
 	}
 
 	c.ShortChannelID = sid
+	c.IsPending = isPending
 	c.Packager = NewChannelPackager(sid)
 
 	return nil
