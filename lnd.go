@@ -750,12 +750,11 @@ func Main(cfg *Config, lisCfg ListenerCfg, shutdownChan <-chan struct{}) error {
 	}
 	defer rpcServer.Stop()
 
-	// If we're not in regtest or simnet mode, We'll wait until we're fully
-	// synced to continue the start up of the remainder of the daemon. This
-	// ensures that we don't accept any possibly invalid state transitions, or
-	// accept channels with spent funds.
-	if !(cfg.Bitcoin.RegTest || cfg.Bitcoin.SimNet ||
-		cfg.Litecoin.RegTest || cfg.Litecoin.SimNet) {
+	// If StartBeforeSynced is not set and we're not in regtest or simnet mode,
+	// we'll wait until we're fully synced to continue the start up of the
+	// remainder of the daemon. This ensures that we don't accept any possibly
+	// invalid state transitions, or accept channels with spent funds.
+	if !startBeforeSynced(cfg, cfg.registeredChains) {
 
 		_, bestHeight, err := activeChainControl.ChainIO.GetBestBlock()
 		if err != nil {
@@ -834,6 +833,16 @@ func Main(cfg *Config, lisCfg ListenerCfg, shutdownChan <-chan struct{}) error {
 	// the interrupt handler.
 	<-shutdownChan
 	return nil
+}
+
+func startBeforeSynced(cfg *Config, registeredChains *chainreg.ChainRegistry) bool {
+	switch registeredChains.PrimaryChain() {
+	case chainreg.BitcoinChain:
+		return cfg.Bitcoin.StartBeforeSynced || cfg.Bitcoin.RegTest || cfg.Bitcoin.SimNet
+	case chainreg.LitecoinChain:
+		return cfg.Litecoin.StartBeforeSynced || cfg.Litecoin.RegTest || cfg.Litecoin.SimNet
+	}
+	return false
 }
 
 // getTLSConfig returns a TLS configuration for the gRPC server and credentials
