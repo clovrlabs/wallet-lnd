@@ -34,7 +34,7 @@ func createNewNotifier(args ...interface{}) (chainntnfs.ChainNotifier, error) {
 			"is  incorrect, expected a chainntfs.ConfirmHintCache")
 	}
 
-	return New(config, spendHintCache, confirmHintCache), nil
+	return New(config, spendHintCache, confirmHintCache, false), nil
 }
 
 // init registers a driver for the NeutrinoNotify concrete implementation of

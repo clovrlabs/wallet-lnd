@@ -208,9 +208,11 @@ func newChainControlFromConfig(cfg *config, chanDB *channeldb.DB,
 		// along with the wallet's ChainSource, which are all backed by
 		// the neutrino light client.
 		cc.chainNotifier = neutrinonotify.New(
-			neutrinoCS, hintCache, hintCache,
+			neutrinoCS, hintCache, hintCache, cfg.NeutrinoMode.PersistToDisk,
 		)
-		cc.chainView, err = chainview.NewCfFilteredChainView(neutrinoCS)
+		cc.chainView, err = chainview.NewCfFilteredChainView(
+			neutrinoCS, cfg.NeutrinoMode.PersistToDisk,
+		)
 		if err != nil {
 			return nil, nil, err
 		}

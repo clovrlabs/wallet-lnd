@@ -44,6 +44,8 @@ type CfFilteredChainView struct {
 	filterMtx   sync.RWMutex
 	chainFilter map[wire.OutPoint][]byte
 
+	persistToDisk bool
+
 	quit chan struct{}
 	wg   sync.WaitGroup
 }
@@ -57,13 +59,14 @@ var _ FilteredChainView = (*CfFilteredChainView)(nil)
 //
 // NOTE: The node should already be running and syncing before being passed into
 // this function.
-func NewCfFilteredChainView(node *neutrino.ChainService) (*CfFilteredChainView, error) {
+func NewCfFilteredChainView(node *neutrino.ChainService, persistToDisk bool) (*CfFilteredChainView, error) {
 	return &CfFilteredChainView{
 		blockQueue:    newBlockEventQueue(),
 		quit:          make(chan struct{}),
 		rescanErrChan: make(chan error),
 		chainFilter:   make(map[wire.OutPoint][]byte),
 		p2pNode:       node,
+		persistToDisk: persistToDisk,
 	}, nil
 }
 
@@ -237,7 +240,13 @@ func (c *CfFilteredChainView) FilterBlock(blockHash *chainhash.Hash) (*FilteredB
 	// Next, using the block, hash, we'll fetch the compact filter for this
 	// block. We only require the regular filter as we're just looking for
 	// outpoint that have been spent.
-	filter, err := c.p2pNode.GetCFilter(*blockHash, wire.GCSFilterRegular)
+	options := make([]neutrino.QueryOption, 0, 1)
+	if c.persistToDisk {
+		options = append(options, neutrino.PersistToDisk())
+	}
+	filter, err := c.p2pNode.GetCFilter(
+		*blockHash, wire.GCSFilterRegular, options...,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("unable to fetch filter: %v", err)
 	}

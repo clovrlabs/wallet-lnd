@@ -72,6 +72,8 @@ type NeutrinoNotifier struct {
 	// which the transaction could have confirmed within the chain.
 	confirmHintCache chainntnfs.ConfirmHintCache
 
+	persistToDisk bool
+
 	wg   sync.WaitGroup
 	quit chan struct{}
 }
@@ -85,7 +87,7 @@ var _ chainntnfs.ChainNotifier = (*NeutrinoNotifier)(nil)
 // NOTE: The passed neutrino node should already be running and active before
 // being passed into this function.
 func New(node *neutrino.ChainService, spendHintCache chainntnfs.SpendHintCache,
-	confirmHintCache chainntnfs.ConfirmHintCache) *NeutrinoNotifier {
+	confirmHintCache chainntnfs.ConfirmHintCache, persistToDisk bool) *NeutrinoNotifier {
 
 	return &NeutrinoNotifier{
 		notificationCancels:  make(chan interface{}),
@@ -103,6 +105,8 @@ func New(node *neutrino.ChainService, spendHintCache chainntnfs.SpendHintCache,
 
 		spendHintCache:   spendHintCache,
 		confirmHintCache: confirmHintCache,
+
+		persistToDisk: persistToDisk,
 
 		quit: make(chan struct{}),
 	}
@@ -523,11 +527,15 @@ func (n *NeutrinoNotifier) historicalConfDetails(confRequest chainntnfs.ConfRequ
 				scanHeight, err)
 		}
 
+		options := []neutrino.QueryOption{neutrino.NumRetries(5)}
+		if n.persistToDisk {
+			options = append(options, neutrino.PersistToDisk())
+		}
+
 		// With the hash computed, we can now fetch the basic filter
 		// for this height.
 		regFilter, err := n.p2pNode.GetCFilter(
-			*blockHash, wire.GCSFilterRegular,
-			neutrino.NumRetries(5),
+			*blockHash, wire.GCSFilterRegular, options...,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("unable to retrieve regular filter for "+
