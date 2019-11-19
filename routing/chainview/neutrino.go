@@ -107,6 +107,9 @@ func (c *CfFilteredChainView) Start() error {
 		),
 		neutrino.WatchInputs(zeroPoint),
 	}
+	if c.persistToDisk {
+		rescanOptions = append(rescanOptions, neutrino.QueryOptions(neutrino.PersistToDisk()))
+	}
 
 	// Finally, we'll create our rescan struct, start it, and launch all
 	// the goroutines we need to operate this FilteredChainView instance.
