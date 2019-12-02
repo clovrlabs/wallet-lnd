@@ -171,6 +171,7 @@ type chainConfig struct {
 	BaseFee             lnwire.MilliSatoshi `long:"basefee" description:"The base fee in millisatoshi we will charge for forwarding payments on our channels"`
 	FeeRate             lnwire.MilliSatoshi `long:"feerate" description:"The fee rate used when forwarding payments on our channels. The total fee charged is basefee + (amount * feerate / 1000000), where amount is the forwarded amount."`
 	TimeLockDelta       uint32              `long:"timelockdelta" description:"The CLTV delta we will subtract from a forwarded HTLC's timelock value"`
+	StartBeforeSynced   bool                `long:"startbeforesynced" description:"Don't wait for the chain to be synchronized to start lnd daemon"`
 }
 
 type neutrinoConfig struct {
@@ -181,6 +182,7 @@ type neutrinoConfig struct {
 	BanThreshold       uint32        `long:"banthreshold" description:"Maximum allowed ban score before disconnecting and banning misbehaving peers."`
 	FeeURL             string        `long:"feeurl" description:"Optional URL for fee estimation. If a URL is not specified, static fees will be used for estimation."`
 	AssertFilterHeader string        `long:"assertfilterheader" description:"Optional filter header in height:hash format to assert the state of neutrino's filter header chain on startup. If the assertion does not hold, then the filter header chain will be re-synced from the genesis block."`
+	PersistToDisk      bool          `long:"persisttodisk" description:"Store persistently compact filters to disk"`
 }
 
 type btcdConfig struct {

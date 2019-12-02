@@ -759,6 +759,7 @@ func initNeutrinoBackend(chainDir string) (*neutrino.ChainService, func(), error
 			return ips, nil
 		},
 		AssertFilterHeader: headerStateAssertion,
+		PersistToDisk:      cfg.NeutrinoMode.PersistToDisk,
 	}
 
 	neutrino.MaxPeers = 8
