@@ -1703,7 +1703,7 @@ func TestFilterKnownChanIDs(t *testing.T) {
 	// If we try to filter out a set of channel ID's before we even know of
 	// any channels, then we should get the entire set back.
 	preChanIDs := []uint64{1, 2, 3, 4}
-	filteredIDs, err := graph.FilterKnownChanIDs(preChanIDs)
+	filteredIDs, err := graph.FilterKnownChanIDs(preChanIDs, true)
 	if err != nil {
 		t.Fatalf("unable to filter chan IDs: %v", err)
 	}
@@ -1792,7 +1792,7 @@ func TestFilterKnownChanIDs(t *testing.T) {
 	}
 
 	for _, queryCase := range queryCases {
-		resp, err := graph.FilterKnownChanIDs(queryCase.queryIDs)
+		resp, err := graph.FilterKnownChanIDs(queryCase.queryIDs, true)
 		if err != nil {
 			t.Fatalf("unable to filter chan IDs: %v", err)
 		}
