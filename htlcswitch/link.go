@@ -271,7 +271,7 @@ type ChannelLinkConfig struct {
 	// NotifyInactiveChannel allows the switch to tell the ChannelNotifier
 	// when channels become inactive.
 	NotifyInactiveChannel func(wire.OutPoint)
-	OnCommitmentRevoked func()
+	OnCommitmentRevoked   func()
 }
 
 // channelLink is the service which drives a channel's commitment update
@@ -1728,6 +1728,10 @@ func (l *channelLink) handleUpstreamMsg(msg lnwire.Message) {
 		// We just received a new updates to our local commitment
 		// chain, validate this new commitment, closing the link if
 		// invalid.
+		log.Infof("Got CommitSig from remote peer, remote height=%v local height=%v",
+			l.channel.RemoteCommitHeight(),
+			l.channel.State().LocalCommitment.CommitHeight)
+
 		err = l.channel.ReceiveNewCommitment(msg.CommitSig, msg.HtlcSigs)
 		if err != nil {
 			// If we were unable to reconstruct their proposed
@@ -1753,6 +1757,9 @@ func (l *channelLink) handleUpstreamMsg(msg lnwire.Message) {
 			)
 			return
 		}
+		log.Infof("ReceiveNewCommitment succeded, remote height=%v local height=%v",
+			l.channel.RemoteCommitHeight(),
+			l.channel.State().LocalCommitment.CommitHeight)
 
 		// As we've just accepted a new state, we'll now
 		// immediately send the remote peer a revocation for our prior
@@ -1762,6 +1769,10 @@ func (l *channelLink) handleUpstreamMsg(msg lnwire.Message) {
 			log.Errorf("unable to revoke commitment: %v", err)
 			return
 		}
+		log.Infof("RevokeCurrentCommitment succeded, remote height=%v local height=%v",
+			l.channel.RemoteCommitHeight(),
+			l.channel.State().LocalCommitment.CommitHeight)
+
 		l.cfg.Peer.SendMessage(false, nextRevocation)
 		l.cfg.OnCommitmentRevoked()
 
@@ -1812,15 +1823,25 @@ func (l *channelLink) handleUpstreamMsg(msg lnwire.Message) {
 		// We've received a revocation from the remote chain, if valid,
 		// this moves the remote chain forward, and expands our
 		// revocation window.
+		log.Infof("Got RevokeAndAck from remote peer, remote height=%v, local height=%v",
+			l.channel.RemoteCommitHeight(),
+			l.channel.State().LocalCommitment.CommitHeight)
+
 		fwdPkg, adds, settleFails, remoteHTLCs, err := l.channel.ReceiveRevocation(
 			msg,
 		)
+
 		if err != nil {
+			log.Infof("ReceiveRevocation failed: %v", err)
 			// TODO(halseth): force close?
 			l.fail(LinkFailureError{code: ErrInvalidRevocation},
 				"unable to accept revocation: %v", err)
 			return
 		}
+
+		log.Infof("ReceiveRevocation succeeded, remote height=%v, local height=%v",
+			l.channel.RemoteCommitHeight(),
+			l.channel.State().LocalCommitment.CommitHeight)
 
 		// The remote party now has a new primary commitment, so we'll
 		// update the contract court to be aware of this new set (the
@@ -1870,6 +1891,10 @@ func (l *channelLink) handleUpstreamMsg(msg lnwire.Message) {
 		if l.failed {
 			return
 		}
+		log.Infof("processRemoteAdds finished, remote height=%v, local height=%v",
+			l.channel.RemoteCommitHeight(),
+			l.channel.State().LocalCommitment.CommitHeight)
+
 		l.cfg.OnCommitmentRevoked()
 
 		if needUpdate {
@@ -2020,6 +2045,10 @@ func (l *channelLink) updateCommitTx() error {
 		CommitSig: theirCommitSig,
 		HtlcSigs:  htlcSigs,
 	}
+	log.Infof("Sending CommitSig message, remote height=%v, local height=%v",
+		l.channel.RemoteCommitHeight(),
+		l.channel.State().LocalCommitment.CommitHeight)
+
 	l.cfg.Peer.SendMessage(false, commitSig)
 
 	// We've just initiated a state transition, attempt to stop the
