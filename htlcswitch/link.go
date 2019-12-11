@@ -1756,9 +1756,10 @@ func (l *channelLink) handleUpstreamMsg(msg lnwire.Message) {
 		// We just received a new updates to our local commitment
 		// chain, validate this new commitment, closing the link if
 		// invalid.
-		log.Infof("Got CommitSig from remote peer, remote height=%v local height=%v",
-			l.channel.RemoteCommitHeight(),
-			l.channel.State().LocalCommitment.CommitHeight)
+		log.Infof("Got CommitSig from remote peer, remote height=%v local height=%v, remotePubKey=%x",
+			l.channel.State().RemoteCommitment.CommitHeight,
+			l.channel.State().LocalCommitment.CommitHeight,
+			l.channel.State().IdentityPub.SerializeCompressed())
 
 		err = l.channel.ReceiveNewCommitment(msg.CommitSig, msg.HtlcSigs)
 		if err != nil {
@@ -1785,9 +1786,10 @@ func (l *channelLink) handleUpstreamMsg(msg lnwire.Message) {
 			)
 			return
 		}
-		log.Infof("ReceiveNewCommitment succeded, remote height=%v local height=%v",
-			l.channel.RemoteCommitHeight(),
-			l.channel.State().LocalCommitment.CommitHeight)
+		log.Infof("ReceiveNewCommitment succeded, remote height=%v local height=%v, remotePubKey=%x",
+			l.channel.State().RemoteCommitment.CommitHeight,
+			l.channel.State().LocalCommitment.CommitHeight,
+			l.channel.State().IdentityPub.SerializeCompressed())
 
 		// As we've just accepted a new state, we'll now
 		// immediately send the remote peer a revocation for our prior
@@ -1797,9 +1799,10 @@ func (l *channelLink) handleUpstreamMsg(msg lnwire.Message) {
 			l.log.Errorf("unable to revoke commitment: %v", err)
 			return
 		}
-		log.Infof("RevokeCurrentCommitment succeded, remote height=%v local height=%v",
-			l.channel.RemoteCommitHeight(),
-			l.channel.State().LocalCommitment.CommitHeight)
+		log.Infof("RevokeCurrentCommitment succeded, remote height=%v local height=%v, remotePubKey=%x",
+			l.channel.State().RemoteCommitment.CommitHeight,
+			l.channel.State().LocalCommitment.CommitHeight,
+			l.channel.State().IdentityPub.SerializeCompressed())
 
 		l.cfg.Peer.SendMessage(false, nextRevocation)
 
@@ -1833,9 +1836,10 @@ func (l *channelLink) handleUpstreamMsg(msg lnwire.Message) {
 		// We've received a revocation from the remote chain, if valid,
 		// this moves the remote chain forward, and expands our
 		// revocation window.
-		log.Infof("Got RevokeAndAck from remote peer, remote height=%v, local height=%v",
-			l.channel.RemoteCommitHeight(),
-			l.channel.State().LocalCommitment.CommitHeight)
+		log.Infof("Got RevokeAndAck from remote peer, remote height=%v, local height=%v, remotePubKey=%x",
+			l.channel.State().RemoteCommitment.CommitHeight,
+			l.channel.State().LocalCommitment.CommitHeight,
+			l.channel.State().IdentityPub.SerializeCompressed())
 
 		fwdPkg, adds, settleFails, remoteHTLCs, err := l.channel.ReceiveRevocation(
 			msg,
@@ -1849,9 +1853,10 @@ func (l *channelLink) handleUpstreamMsg(msg lnwire.Message) {
 			return
 		}
 
-		log.Infof("ReceiveRevocation succeeded, remote height=%v, local height=%v",
-			l.channel.RemoteCommitHeight(),
-			l.channel.State().LocalCommitment.CommitHeight)
+		log.Infof("ReceiveRevocation succeeded, remote height=%v, local height=%v, remotePubKey=%x",
+			l.channel.State().RemoteCommitment.CommitHeight,
+			l.channel.State().LocalCommitment.CommitHeight,
+			l.channel.State().IdentityPub.SerializeCompressed())
 
 		// The remote party now has a new primary commitment, so we'll
 		// update the contract court to be aware of this new set (the
@@ -1897,10 +1902,10 @@ func (l *channelLink) handleUpstreamMsg(msg lnwire.Message) {
 		if l.failed {
 			return
 		}
-
-		log.Infof("processRemoteAdds finished, remote height=%v, local height=%v",
-			l.channel.RemoteCommitHeight(),
-			l.channel.State().LocalCommitment.CommitHeight)
+		log.Infof("processRemoteAdds finished, remote height=%v, local height=%v, remotePubKey=%x",
+			l.channel.State().RemoteCommitment.CommitHeight,
+			l.channel.State().LocalCommitment.CommitHeight,
+			l.channel.State().IdentityPub.SerializeCompressed())
 
 		// The revocation window opened up. If there are pending local
 		// updates, try to update the commit tx. Pending updates could
@@ -2084,9 +2089,10 @@ func (l *channelLink) updateCommitTx() error {
 		CommitSig: theirCommitSig,
 		HtlcSigs:  htlcSigs,
 	}
-	log.Infof("Sending CommitSig message, remote height=%v, local height=%v",
-		l.channel.RemoteCommitHeight(),
-		l.channel.State().LocalCommitment.CommitHeight)
+	log.Infof("Sending CommitSig message, remote height=%v, local height=%v, remotePubKey=%x",
+		l.channel.State().RemoteCommitment.CommitHeight,
+		l.channel.State().LocalCommitment.CommitHeight,
+		l.channel.State().IdentityPub.SerializeCompressed())
 
 	l.cfg.Peer.SendMessage(false, commitSig)
 
