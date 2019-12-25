@@ -1189,8 +1189,28 @@ func (c ChainActionMap) Merge(actions ChainActionMap) {
 // last minute as we want to ensure that when we *need* (HTLC is timed out) to
 // sweep, the commitment is already confirmed.
 func (c *ChannelArbitrator) shouldGoOnChain(htlcExpiry, broadcastDelta,
-	currentHeight uint32) bool {
+	currentHeight uint32, rHash [32]byte) (bool, error) {
 
+	// In the case where the user specified to not force close channels that
+	// have outgoing htlc which is a result of its own payment, then we execute
+	// this check and try to exit early.
+	// This shouldn't add any security risk as there is no incoming htlc to
+	// fulfill at this case and the expectation is that when the channel is
+	// is active the other node will send update_fail_htlc to remove the htlc
+	// without closing the channel. it is up to the user to force close the
+	// channel if the peer misbehaves and doesn't send the update_fail_htlc.
+	// It is useful when this node is most of the time not online and is
+	// likely to miss the time slot where the htlc may be cancelled.
+	if c.cfg.KeepChannelsWithPendingPayments {
+		initiated, err := c.cfg.IsInitiatedPayment(rHash)
+		if err != nil {
+			return false, err
+		}
+		if initiated {
+			log.Infof("skipping on chain for initiated payment %x", rHash)
+			return false, nil
+		}
+	}
 	// We'll calculate the broadcast cut off for this HTLC. This is the
 	// height that (based on our current fee estimation) we should
 	// broadcast in order to ensure the commitment transaction is confirmed
@@ -1207,7 +1227,7 @@ func (c *ChannelArbitrator) shouldGoOnChain(htlcExpiry, broadcastDelta,
 
 	// We should on-chain for this HTLC, iff we're within out broadcast
 	// cutoff window.
-	return currentHeight >= broadcastCutOff
+	return currentHeight >= broadcastCutOff, nil
 }
 
 // checkCommitChainActions is called for each new block connected to the end of
@@ -1235,10 +1255,13 @@ func (c *ChannelArbitrator) checkCommitChainActions(height uint32,
 	for _, htlc := range htlcs.outgoingHTLCs {
 		// We'll need to go on-chain for an outgoing HTLC if it was
 		// never resolved downstream, and it's "close" to timing out.
-		toChain := c.shouldGoOnChain(
+		toChain, err := c.shouldGoOnChain(
 			htlc.RefundTimeout, c.cfg.OutgoingBroadcastDelta,
-			height,
+			height, htlc.RHash,
 		)
+		if err != nil {
+			return nil, err
+		}
 
 		if toChain {
 			log.Debugf("ChannelArbitrator(%v): go to chain for "+
@@ -1267,10 +1290,13 @@ func (c *ChannelArbitrator) checkCommitChainActions(height uint32,
 			continue
 		}
 
-		toChain := c.shouldGoOnChain(
+		toChain, err := c.shouldGoOnChain(
 			htlc.RefundTimeout, c.cfg.IncomingBroadcastDelta,
-			height,
+			height, htlc.RHash,
 		)
+		if err != nil {
+			return nil, err
+		}
 
 		if toChain {
 			log.Debugf("ChannelArbitrator(%v): go to chain for "+
@@ -1300,6 +1326,14 @@ func (c *ChannelArbitrator) checkCommitChainActions(height uint32,
 	// a timeout (then cancel backwards), cancel them backwards
 	// immediately, or watch them as they're still active contracts.
 	for _, htlc := range htlcs.outgoingHTLCs {
+		goOnChain, err := c.shouldGoOnChain(
+			htlc.RefundTimeout, c.cfg.OutgoingBroadcastDelta,
+			height, htlc.RHash,
+		)
+		if err != nil {
+			return nil, err
+		}
+
 		switch {
 		// If the HTLC is dust, then we can cancel it backwards
 		// immediately as there's no matching contract to arbitrate
@@ -1318,10 +1352,7 @@ func (c *ChannelArbitrator) checkCommitChainActions(height uint32,
 		// mark it still "live". After we broadcast, we'll monitor it
 		// until the HTLC times out to see if we can also redeem it
 		// on-chain.
-		case !c.shouldGoOnChain(
-			htlc.RefundTimeout, c.cfg.OutgoingBroadcastDelta,
-			height,
-		):
+		case !goOnChain:
 			// TODO(roasbeef): also need to be able to query
 			// circuit map to see if HTLC hasn't been fully
 			// resolved
@@ -1432,9 +1463,12 @@ func (c *ChannelArbitrator) checkLocalChainActions(
 	// Next, we'll examine the remote commitment (and maybe a dangling one)
 	// to see if the set difference of our HTLCs is non-empty. If so, then
 	// we may need to cancel back some HTLCs if we decide go to chain.
-	remoteDanglingActions := c.checkRemoteDanglingActions(
+	remoteDanglingActions, err := c.checkRemoteDanglingActions(
 		height, activeHTLCs, commitsConfirmed,
 	)
+	if err != nil {
+		return nil, err
+	}
 
 	// Finally, we'll merge the two set of chain actions.
 	localCommitActions.Merge(remoteDanglingActions)
@@ -1448,7 +1482,7 @@ func (c *ChannelArbitrator) checkLocalChainActions(
 // cancel immediately.
 func (c *ChannelArbitrator) checkRemoteDanglingActions(
 	height uint32, activeHTLCs map[HtlcSetKey]htlcSet,
-	commitsConfirmed bool) ChainActionMap {
+	commitsConfirmed bool) (ChainActionMap, error) {
 
 	var (
 		pendingRemoteHTLCs []channeldb.HTLC
@@ -1488,10 +1522,13 @@ func (c *ChannelArbitrator) checkRemoteDanglingActions(
 	for _, htlc := range pendingRemoteHTLCs {
 		// We'll now check if we need to go to chain in order to cancel
 		// the incoming HTLC.
-		goToChain := c.shouldGoOnChain(
+		goToChain, err := c.shouldGoOnChain(
 			htlc.RefundTimeout, c.cfg.OutgoingBroadcastDelta,
-			height,
+			height, htlc.RHash,
 		)
+		if err != nil {
+			return nil, err
+		}
 
 		// If we don't need to go to chain, and no commitments have
 		// been confirmed, then we can move on. Otherwise, if
@@ -1510,7 +1547,7 @@ func (c *ChannelArbitrator) checkRemoteDanglingActions(
 		)
 	}
 
-	return actionMap
+	return actionMap, nil
 }
 
 // checkRemoteChainActions examines the two possible remote commitment chains

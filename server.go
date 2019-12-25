@@ -27,6 +27,7 @@ import (
 	"github.com/go-errors/errors"
 	sphinx "github.com/lightningnetwork/lightning-onion"
 	"github.com/lightningnetwork/lnd/autopilot"
+	"github.com/lightningnetwork/lnd/backupnotifier"
 	"github.com/lightningnetwork/lnd/brontide"
 	"github.com/lightningnetwork/lnd/chanacceptor"
 	"github.com/lightningnetwork/lnd/chanbackup"
@@ -57,8 +58,7 @@ import (
 	"github.com/lightningnetwork/lnd/walletunlocker"
 	"github.com/lightningnetwork/lnd/watchtower/wtclient"
 	"github.com/lightningnetwork/lnd/watchtower/wtdb"
-	"github.com/lightningnetwork/lnd/watchtower/wtpolicy"	
-	"github.com/lightningnetwork/lnd/backupnotifier"
+	"github.com/lightningnetwork/lnd/watchtower/wtpolicy"
 )
 
 const (
@@ -382,7 +382,7 @@ func newServer(listenAddrs []net.Addr, chanDB *channeldb.DB,
 
 		// TODO(roasbeef): derive proper onion key based on rotation
 		// schedule
-		sphinx: hop.NewOnionProcessor(sphinxRouter),
+		sphinx:         hop.NewOnionProcessor(sphinxRouter),
 		backupNotifier: backupnotifier.NewBackupNotifier(),
 
 		persistentPeers:         make(map[string]bool),
@@ -887,10 +887,18 @@ func newServer(listenAddrs []net.Addr, chanDB *channeldb.DB,
 				return ErrServerShuttingDown
 			}
 		},
-		DisableChannel:      s.chanStatusMgr.RequestDisable,
-		Sweeper:             s.sweeper,
-		Registry:            s.invoices,
-		NotifyClosedChannel: s.channelNotifier.NotifyClosedChannelEvent,
+		DisableChannel:                  s.chanStatusMgr.RequestDisable,
+		Sweeper:                         s.sweeper,
+		Registry:                        s.invoices,
+		NotifyClosedChannel:             s.channelNotifier.NotifyClosedChannelEvent,
+		KeepChannelsWithPendingPayments: cfg.KeepChannelsWithPendingPayments,
+		IsInitiatedPayment: func(hash [32]byte) (bool, error) {
+			payment, err := paymentControl.FetchPayment(hash)
+			if err == channeldb.ErrPaymentNotInitiated {
+				return false, nil
+			}
+			return payment != nil, err
+		},
 	}, chanDB)
 
 	s.breachArbiter = newBreachArbiter(&BreachConfig{
@@ -1281,7 +1289,7 @@ func (s *server) Start() error {
 				return
 			}
 			cleanup = cleanup.add(s.towerClient.Stop)
-		}		
+		}
 
 		if err := s.htlcSwitch.Start(); err != nil {
 			startErr = err

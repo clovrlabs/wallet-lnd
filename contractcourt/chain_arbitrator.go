@@ -150,6 +150,14 @@ type ChainArbitratorConfig struct {
 	// NotifyClosedChannel is a function closure that the ChainArbitrator
 	// will use to notify the ChannelNotifier about a newly closed channel.
 	NotifyClosedChannel func(wire.OutPoint)
+
+	// KeepChannelsWithPendingPayments indicates if we will force close
+	// channels the case outgoing htlc that is a result of an initiated
+	// payment of this node has time-outed.
+	KeepChannelsWithPendingPayments bool
+
+	// IsInitiatedPayment checks if a payment exists for a given hash.
+	IsInitiatedPayment func(hash [32]byte) (bool, error)
 }
 
 // ChainArbitrator is a sub-system that oversees the on-chain resolution of all
