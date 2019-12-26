@@ -915,11 +915,19 @@ func newServer(listenAddrs []net.Addr, chanDB *channeldb.DB,
 				return ErrServerShuttingDown
 			}
 		},
-		DisableChannel:      s.chanStatusMgr.RequestDisable,
-		Sweeper:             s.sweeper,
-		Registry:            s.invoices,
-		NotifyClosedChannel: s.channelNotifier.NotifyClosedChannelEvent,
-		OnionProcessor:      s.sphinx,
+		DisableChannel:                  s.chanStatusMgr.RequestDisable,
+		Sweeper:                         s.sweeper,
+		Registry:                        s.invoices,
+		NotifyClosedChannel:             s.channelNotifier.NotifyClosedChannelEvent,
+		OnionProcessor:                  s.sphinx,
+		KeepChannelsWithPendingPayments: cfg.KeepChannelsWithPendingPayments,
+		IsInitiatedPayment: func(hash [32]byte) (bool, error) {
+			payment, err := paymentControl.FetchPayment(hash)
+			if err == channeldb.ErrPaymentNotInitiated {
+				return false, nil
+			}
+			return payment != nil, err
+		},
 	}, chanDB)
 
 	s.breachArbiter = newBreachArbiter(&BreachConfig{

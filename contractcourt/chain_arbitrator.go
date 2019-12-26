@@ -153,6 +153,14 @@ type ChainArbitratorConfig struct {
 	// OnionProcessor is used to decode onion payloads for on-chain
 	// resolution.
 	OnionProcessor OnionProcessor
+
+	// KeepChannelsWithPendingPayments indicates if we will force close
+	// channels with outgoing htlcs that have timed-out and they are
+	// initiated by this node (e.g initiated payment).
+	KeepChannelsWithPendingPayments bool
+
+	// IsInitiatedPayment checks if a payment exists for a given hash.
+	IsInitiatedPayment func(hash [32]byte) (bool, error)
 }
 
 // ChainArbitrator is a sub-system that oversees the on-chain resolution of all
