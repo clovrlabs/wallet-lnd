@@ -22,6 +22,7 @@ import (
 	"github.com/lightningnetwork/lnd/input"
 	"github.com/lightningnetwork/lnd/lnwallet"
 	"github.com/lightningnetwork/lnd/lnwallet/btcwallet"
+	"github.com/lightningnetwork/lnd/lnwallet/chainfee"
 )
 
 const (
@@ -510,7 +511,7 @@ func GetUtxos(db walletdb.DB, txstore *wtxmgr.Store, net *chaincfg.Params, start
 	return utxos, nil
 }
 
-func RedeemFees(db *channeldb.DB, net *chaincfg.Params, wallet *lnwallet.LightningWallet, hash []byte, feePerKw lnwallet.SatPerKWeight) (btcutil.Amount, error) {
+func RedeemFees(db *channeldb.DB, net *chaincfg.Params, wallet *lnwallet.LightningWallet, hash []byte, feePerKw chainfee.SatPerKWeight) (btcutil.Amount, error) {
 	creationHeight, _, _, script, err := getSwapperSubmarineData(db, net.ScriptHashAddrID, hash[:])
 	if err != nil {
 		return 0, err
@@ -569,7 +570,7 @@ func RedeemFees(db *channeldb.DB, net *chaincfg.Params, wallet *lnwallet.Lightni
 }
 
 // Redeem
-func Redeem(db *channeldb.DB, net *chaincfg.Params, wallet *lnwallet.LightningWallet, preimage []byte, redeemAddress btcutil.Address, feePerKw lnwallet.SatPerKWeight) (*wire.MsgTx, error) {
+func Redeem(db *channeldb.DB, net *chaincfg.Params, wallet *lnwallet.LightningWallet, preimage []byte, redeemAddress btcutil.Address, feePerKw chainfee.SatPerKWeight) (*wire.MsgTx, error) {
 
 	hash := sha256.Sum256(preimage)
 	creationHeight, _, serviceKey, script, err := getSwapperSubmarineData(db, net.ScriptHashAddrID, hash[:])
@@ -638,7 +639,7 @@ func Redeem(db *channeldb.DB, net *chaincfg.Params, wallet *lnwallet.LightningWa
 }
 
 // Refund
-func Refund(db *channeldb.DB, net *chaincfg.Params, wallet *lnwallet.LightningWallet, address, refundAddress btcutil.Address, feePerKw lnwallet.SatPerKWeight) (*wire.MsgTx, error) {
+func Refund(db *channeldb.DB, net *chaincfg.Params, wallet *lnwallet.LightningWallet, address, refundAddress btcutil.Address, feePerKw chainfee.SatPerKWeight) (*wire.MsgTx, error) {
 
 	creationHeight, lockHeight, _, clientKey, _, script, err := getSubmarineData(db, net.ScriptHashAddrID, address)
 	if err != nil {
