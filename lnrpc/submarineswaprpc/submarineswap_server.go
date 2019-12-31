@@ -13,6 +13,7 @@ import (
 	"github.com/lightningnetwork/lnd/lnrpc"
 	"github.com/lightningnetwork/lnd/lnwallet"
 	"github.com/lightningnetwork/lnd/lnwallet/btcwallet"
+	"github.com/lightningnetwork/lnd/lnwallet/chainfee"
 	"github.com/lightningnetwork/lnd/submarineswap"
 	"github.com/lightningnetwork/lnd/sweep"
 	"google.golang.org/grpc"
@@ -305,7 +306,7 @@ func (s *Server) UnspentAmount(ctx context.Context,
 
 func (s *Server) SubSwapServiceRedeemFees(ctx context.Context,
 	in *SubSwapServiceRedeemFeesRequest) (*SubSwapServiceRedeemFeesResponse, error) {
-	satPerKw := lnwallet.SatPerKVByte(in.SatPerByte * 1000).FeePerKWeight()
+	satPerKw := chainfee.SatPerKVByte(in.SatPerByte * 1000).FeePerKWeight()
 	feePerKw, err := sweep.DetermineFeePerKw(
 		s.cfg.FeeEstimator, sweep.FeePreference{
 			ConfTarget: uint32(in.TargetConf),
@@ -337,7 +338,7 @@ func (s *Server) SubSwapServiceRedeem(ctx context.Context,
 		return nil, err
 	}
 
-	satPerKw := lnwallet.SatPerKVByte(in.SatPerByte * 1000).FeePerKWeight()
+	satPerKw := chainfee.SatPerKVByte(in.SatPerByte * 1000).FeePerKWeight()
 	feePerKw, err := sweep.DetermineFeePerKw(
 		s.cfg.FeeEstimator, sweep.FeePreference{
 			ConfTarget: uint32(in.TargetConf),
@@ -375,7 +376,7 @@ func (s *Server) SubSwapClientRefund(ctx context.Context,
 		return nil, err
 	}
 
-	satPerKw := lnwallet.SatPerKVByte(in.SatPerByte * 1000).FeePerKWeight()
+	satPerKw := chainfee.SatPerKVByte(in.SatPerByte * 1000).FeePerKWeight()
 	feePerKw, err := sweep.DetermineFeePerKw(
 		s.cfg.FeeEstimator, sweep.FeePreference{
 			ConfTarget: uint32(in.TargetConf),
