@@ -5,6 +5,7 @@ package submarineswaprpc
 import (
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/lightningnetwork/lnd/lnwallet"
+	"github.com/lightningnetwork/lnd/lnwallet/chainfee"
 	"github.com/lightningnetwork/lnd/macaroons"
 )
 
@@ -34,7 +35,7 @@ type Config struct {
 	// authentication for the submarine swapper RPC server.
 	MacService *macaroons.Service
 
-	FeeEstimator lnwallet.FeeEstimator
+	FeeEstimator chainfee.Estimator
 
 	Wallet *lnwallet.LightningWallet
 }
