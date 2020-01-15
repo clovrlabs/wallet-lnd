@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcutil"
@@ -260,6 +261,9 @@ type ChannelArbitrator struct {
 	started int32 // To be used atomically.
 	stopped int32 // To be used atomically.
 
+	// startTimestamp is the time when this ChannelArbitrator was started.
+	startTimestamp time.Time
+
 	// log is a persistent log that the attendant will use to checkpoint
 	// its next action, and the state of any unresolved contracts.
 	log ArbitratorLog
@@ -328,6 +332,7 @@ func (c *ChannelArbitrator) Start() error {
 	if !atomic.CompareAndSwapInt32(&c.started, 0, 1) {
 		return nil
 	}
+	c.startTimestamp = time.Now()
 
 	var (
 		err error
@@ -1116,22 +1121,25 @@ func (c ChainActionMap) Merge(actions ChainActionMap) {
 func (c *ChannelArbitrator) shouldGoOnChain(htlcExpiry, broadcastDelta,
 	currentHeight uint32, rHash [32]byte) (bool, error) {
 
-	// In the case where the user specified to not force close channels that
-	// have outgoing htlc which is a result of its own payment, then we execute
-	// this check and try to exit early.
+	// For htlcs that are result of our initiated payments we give some grace
+	// period before force closing the channel. During this time we expect
+	// both nodes to connect and give a chance to the other node to send his
+	// updates and cancel the htlc.
 	// This shouldn't add any security risk as there is no incoming htlc to
 	// fulfill at this case and the expectation is that when the channel is
-	// is active the other node will send update_fail_htlc to remove the htlc
+	// active the other node will send update_fail_htlc to remove the htlc
 	// without closing the channel. it is up to the user to force close the
 	// channel if the peer misbehaves and doesn't send the update_fail_htlc.
 	// It is useful when this node is most of the time not online and is
 	// likely to miss the time slot where the htlc may be cancelled.
-	if c.cfg.KeepChannelsWithPendingPayments {
-		initiated, err := c.cfg.IsInitiatedPayment(rHash)
-		if err != nil {
-			return false, err
-		}
-		if initiated {
+	initiated, err := c.cfg.IsInitiatedPayment(rHash)
+	if err != nil {
+		return false, err
+	}
+	if initiated {
+		runningDuration := time.Now().Sub(c.startTimestamp)
+		if runningDuration < c.cfg.PaymentsExpirationGracePriod ||
+			currentHeight < htlcExpiry {
 			log.Infof("skipping on chain for initiated payment %x", rHash)
 			return false, nil
 		}

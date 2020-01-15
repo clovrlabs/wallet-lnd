@@ -915,12 +915,12 @@ func newServer(listenAddrs []net.Addr, chanDB *channeldb.DB,
 				return ErrServerShuttingDown
 			}
 		},
-		DisableChannel:                  s.chanStatusMgr.RequestDisable,
-		Sweeper:                         s.sweeper,
-		Registry:                        s.invoices,
-		NotifyClosedChannel:             s.channelNotifier.NotifyClosedChannelEvent,
-		OnionProcessor:                  s.sphinx,
-		KeepChannelsWithPendingPayments: cfg.KeepChannelsWithPendingPayments,
+		DisableChannel:               s.chanStatusMgr.RequestDisable,
+		Sweeper:                      s.sweeper,
+		Registry:                     s.invoices,
+		NotifyClosedChannel:          s.channelNotifier.NotifyClosedChannelEvent,
+		OnionProcessor:               s.sphinx,
+		PaymentsExpirationGracePriod: cfg.PaymentsExpirationGracePriod,
 		IsInitiatedPayment: func(hash [32]byte) (bool, error) {
 			payment, err := paymentControl.FetchPayment(hash)
 			if err == channeldb.ErrPaymentNotInitiated {
