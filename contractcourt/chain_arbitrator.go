@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
@@ -154,10 +155,10 @@ type ChainArbitratorConfig struct {
 	// resolution.
 	OnionProcessor OnionProcessor
 
-	// KeepChannelsWithPendingPayments indicates if we will force close
-	// channels with outgoing htlcs that have timed-out and they are
-	// initiated by this node (e.g initiated payment).
-	KeepChannelsWithPendingPayments bool
+	// PaymentsExpirationGracePriod indicates is a time window we let the
+	// other node to cancel an ougoing htlc that our node has initiated and
+	// has timed out.
+	PaymentsExpirationGracePriod time.Duration
 
 	// IsInitiatedPayment checks if a payment exists for a given hash.
 	IsInitiatedPayment func(hash [32]byte) (bool, error)
