@@ -473,7 +473,7 @@ func GetUtxos(db walletdb.DB, txstore *wtxmgr.Store, net *chaincfg.Params, start
 				if d.Block.Height != -1 {
 					for i, txout := range d.MsgTx.TxOut {
 						_, addrs, _, err := txscript.ExtractPkScriptAddrs(txout.PkScript, net)
-						if err == nil {
+						if err == nil && len(addrs) == 1 {
 							if addrs[0].String() == address {
 								h := d.MsgTx.TxHash()
 								op := wire.NewOutPoint(&h, uint32(i))
