@@ -1121,29 +1121,6 @@ func (c ChainActionMap) Merge(actions ChainActionMap) {
 func (c *ChannelArbitrator) shouldGoOnChain(htlcExpiry, broadcastDelta,
 	currentHeight uint32, rHash [32]byte) (bool, error) {
 
-	// For htlcs that are result of our initiated payments we give some grace
-	// period before force closing the channel. During this time we expect
-	// both nodes to connect and give a chance to the other node to send his
-	// updates and cancel the htlc.
-	// This shouldn't add any security risk as there is no incoming htlc to
-	// fulfill at this case and the expectation is that when the channel is
-	// active the other node will send update_fail_htlc to remove the htlc
-	// without closing the channel. it is up to the user to force close the
-	// channel if the peer misbehaves and doesn't send the update_fail_htlc.
-	// It is useful when this node is most of the time not online and is
-	// likely to miss the time slot where the htlc may be cancelled.
-	initiated, err := c.cfg.IsInitiatedPayment(rHash)
-	if err != nil {
-		return false, err
-	}
-	if initiated {
-		runningDuration := time.Now().Sub(c.startTimestamp)
-		if runningDuration < c.cfg.PaymentsExpirationGracePriod ||
-			currentHeight < htlcExpiry {
-			log.Infof("skipping on chain for initiated payment %x", rHash)
-			return false, nil
-		}
-	}
 	// We'll calculate the broadcast cut off for this HTLC. This is the
 	// height that (based on our current fee estimation) we should
 	// broadcast in order to ensure the commitment transaction is confirmed
@@ -1160,7 +1137,33 @@ func (c *ChannelArbitrator) shouldGoOnChain(htlcExpiry, broadcastDelta,
 
 	// We should on-chain for this HTLC, iff we're within out broadcast
 	// cutoff window.
-	return currentHeight >= broadcastCutOff, nil
+	if currentHeight < broadcastCutOff {
+		return false, nil
+	}
+
+	// Check if this hash is related to a payment initiated by this node.
+	initiated, err := c.cfg.IsInitiatedPayment(rHash)
+	if err != nil {
+		return false, err
+	}
+
+	if !initiated {
+		return true, nil
+	}
+
+	// For htlcs that are result of our initiated payments we give some grace
+	// period before force closing the channel. During this time we expect
+	// both nodes to connect and give a chance to the other node to send his
+	// updates and cancel the htlc.
+	// This shouldn't add any security risk as there is no incoming htlc to
+	// fulfill at this case and the expectation is that when the channel is
+	// active the other node will send update_fail_htlc to remove the htlc
+	// without closing the channel. It is up to the user to force close the
+	// channel if the peer misbehaves and doesn't send the update_fail_htlc.
+	// It is useful when this node is most of the time not online and is
+	// likely to miss the time slot where the htlc may be cancelled.
+	runningPeriod := time.Now().Sub(c.startTimestamp)
+	return runningPeriod > c.cfg.PaymentsExpirationGracePriod, nil
 }
 
 // checkCommitChainActions is called for each new block connected to the end of

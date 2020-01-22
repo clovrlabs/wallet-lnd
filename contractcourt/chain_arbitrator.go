@@ -156,7 +156,7 @@ type ChainArbitratorConfig struct {
 	OnionProcessor OnionProcessor
 
 	// PaymentsExpirationGracePriod indicates is a time window we let the
-	// other node to cancel an ougoing htlc that our node has initiated and
+	// other node to cancel an outgoing htlc that our node has initiated and
 	// has timed out.
 	PaymentsExpirationGracePriod time.Duration
 
