@@ -15,6 +15,7 @@ import (
 	"github.com/lightningnetwork/lnd/lnrpc/invoicesrpc"
 	"github.com/lightningnetwork/lnd/lnrpc/routerrpc"
 	"github.com/lightningnetwork/lnd/lnrpc/signrpc"
+	"github.com/lightningnetwork/lnd/lnrpc/submarineswaprpc"
 	"github.com/lightningnetwork/lnd/lnrpc/walletrpc"
 	"github.com/lightningnetwork/lnd/lnrpc/watchtowerrpc"
 	"github.com/lightningnetwork/lnd/lnrpc/wtclientrpc"
@@ -72,6 +73,10 @@ type subRPCServerConfigs struct {
 	// instance within lnd in order to add, remove, list registered client
 	// towers, etc.
 	WatchtowerClientRPC *wtclientrpc.Config `group:"wtclientrpc" namespace:"wtclientrpc"`
+
+	// SubmarineSwapRPC is a sub-RPC server that exposes functionality allowing
+	// submarine swaps funding of channels.
+	SubmarineSwapRPC *submarineswaprpc.Config `group:"submarineswaprpc" namespace:"submarineswaprpc"`
 }
 
 // PopulateDependencies attempts to iterate through all the sub-server configs
@@ -258,6 +263,25 @@ func (s *subRPCServerConfigs) PopulateDependencies(cc *chainControl,
 			}
 			subCfgValue.FieldByName("Resolver").Set(
 				reflect.ValueOf(tcpResolver),
+			)
+
+		case *submarineswaprpc.Config:
+			subCfgValue := extractReflectValue(subCfg)
+
+			subCfgValue.FieldByName("NetworkDir").Set(
+				reflect.ValueOf(networkDir),
+			)
+			subCfgValue.FieldByName("ActiveNetParams").Set(
+				reflect.ValueOf(activeNetParams),
+			)
+			subCfgValue.FieldByName("MacService").Set(
+				reflect.ValueOf(macService),
+			)
+			subCfgValue.FieldByName("FeeEstimator").Set(
+				reflect.ValueOf(cc.feeEstimator),
+			)
+			subCfgValue.FieldByName("Wallet").Set(
+				reflect.ValueOf(cc.wallet),
 			)
 
 		default:

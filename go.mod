@@ -64,4 +64,6 @@ replace github.com/lightningnetwork/lnd/cert => ./cert
 
 replace git.schwanenlied.me/yawning/bsaes.git => github.com/Yawning/bsaes v0.0.0-20180720073208-c0276d75487e
 
+replace github.com/btcsuite/btcwallet v0.11.0 => github.com/breez/btcwallet v0.11.1-0.20200128134919-5467fb319e32
+
 go 1.12
