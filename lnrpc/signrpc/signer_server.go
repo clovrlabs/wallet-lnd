@@ -235,7 +235,22 @@ func (s *Server) SignOutputRaw(ctx context.Context, in *SignReq) (*SignResp, err
 		return nil, fmt.Errorf("unable to decode tx: %v", err)
 	}
 
-	sigHashCache := txscript.NewTxSigHashes(&txToSign)
+	var sigHashCache *txscript.TxSigHashes
+	if in.SigHashes == nil {
+		sigHashCache = txscript.NewTxSigHashes(&txToSign)
+	} else {
+		var hashPrevOuts, hashSequence, hashOutputs chainhash.Hash
+		if err := hashPrevOuts.SetBytes(in.SigHashes.HashPrevOuts); err != nil {
+			return nil, fmt.Errorf("bad HashPrevOuts: %w", err)
+		}
+		if err := hashSequence.SetBytes(in.SigHashes.HashSequence); err != nil {
+			return nil, fmt.Errorf("bad HashSequence: %w", err)
+		}
+		if err := hashOutputs.SetBytes(in.SigHashes.HashOutputs); err != nil {
+			return nil, fmt.Errorf("bad HashOutputs: %w", err)
+		}
+		sigHashCache = &txscript.TxSigHashes{hashPrevOuts, hashSequence, hashOutputs}
+	}
 
 	log.Debugf("Generating sigs for %v inputs: ", len(in.SignDescs))
 
@@ -334,6 +349,11 @@ func (s *Server) SignOutputRaw(ctx context.Context, in *SignReq) (*SignResp, err
 
 		resp.RawSigs[i] = sig.Serialize()
 	}
+	resp.SigHashes = &TxSigHashes{
+		HashPrevOuts: sigHashCache.HashPrevOuts[:],
+		HashSequence: sigHashCache.HashSequence[:],
+		HashOutputs:  sigHashCache.HashOutputs[:],
+	}
 
 	return resp, nil
 }
@@ -371,7 +391,22 @@ func (s *Server) ComputeInputScript(ctx context.Context,
 		return nil, fmt.Errorf("unable to decode tx: %v", err)
 	}
 
-	sigHashCache := txscript.NewTxSigHashes(&txToSign)
+	var sigHashCache *txscript.TxSigHashes
+	if in.SigHashes == nil {
+		sigHashCache = txscript.NewTxSigHashes(&txToSign)
+	} else {
+		var hashPrevOuts, hashSequence, hashOutputs chainhash.Hash
+		if err := hashPrevOuts.SetBytes(in.SigHashes.HashPrevOuts); err != nil {
+			return nil, fmt.Errorf("bad HashPrevOuts: %w", err)
+		}
+		if err := hashSequence.SetBytes(in.SigHashes.HashSequence); err != nil {
+			return nil, fmt.Errorf("bad HashSequence: %w", err)
+		}
+		if err := hashOutputs.SetBytes(in.SigHashes.HashOutputs); err != nil {
+			return nil, fmt.Errorf("bad HashOutputs: %w", err)
+		}
+		sigHashCache = &txscript.TxSigHashes{hashPrevOuts, hashSequence, hashOutputs}
+	}
 
 	signDescs := make([]*input.SignDescriptor, 0, len(in.SignDescs))
 	for _, signDesc := range in.SignDescs {
@@ -409,6 +444,11 @@ func (s *Server) ComputeInputScript(ctx context.Context,
 			Witness:   inputScript.Witness,
 			SigScript: inputScript.SigScript,
 		}
+	}
+	resp.SigHashes = &TxSigHashes{
+		HashPrevOuts: sigHashCache.HashPrevOuts[:],
+		HashSequence: sigHashCache.HashSequence[:],
+		HashOutputs:  sigHashCache.HashOutputs[:],
 	}
 
 	return resp, nil
