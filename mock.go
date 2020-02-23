@@ -15,10 +15,13 @@ import (
 	"github.com/btcsuite/btcwallet/wallet/txauthor"
 
 	"github.com/lightningnetwork/lnd/chainntnfs"
+	"github.com/lightningnetwork/lnd/channeldb"
+	"github.com/lightningnetwork/lnd/htlcinterceptor"
 	"github.com/lightningnetwork/lnd/input"
 	"github.com/lightningnetwork/lnd/keychain"
 	"github.com/lightningnetwork/lnd/lnwallet"
 	"github.com/lightningnetwork/lnd/lnwallet/chainfee"
+	"github.com/lightningnetwork/lnd/lnwire"
 )
 
 var (
@@ -358,4 +361,13 @@ func (m *mockSecretKeyRing) DerivePrivKey(keyDesc keychain.KeyDescriptor) (*btce
 func (m *mockSecretKeyRing) ScalarMult(keyDesc keychain.KeyDescriptor,
 	pubKey *btcec.PublicKey) ([]byte, error) {
 	return nil, nil
+}
+
+// mockHtlcInterceptoris an implementation of htlcinterceptor.Interceptor
+// that doesn't intercept any forward and keeps the default behavior.
+type mockHtlcInterceptor struct{}
+
+func (m *mockHtlcInterceptor) InterceptForwardHtlc(channeldb.CircuitKey,
+	lnwire.UpdateAddHTLC, htlcinterceptor.ForwardResolver) bool {
+	return false
 }

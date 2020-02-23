@@ -24,6 +24,7 @@ import (
 	"github.com/lightningnetwork/lnd/channeldb"
 	"github.com/lightningnetwork/lnd/clock"
 	"github.com/lightningnetwork/lnd/contractcourt"
+	"github.com/lightningnetwork/lnd/htlcinterceptor"
 	"github.com/lightningnetwork/lnd/htlcswitch/hop"
 	"github.com/lightningnetwork/lnd/input"
 	"github.com/lightningnetwork/lnd/invoices"
@@ -172,11 +173,12 @@ func initSwitchWithDB(startingHeight uint32, db *channeldb.DB) (*Switch, error) 
 		FetchLastChannelUpdate: func(lnwire.ShortChannelID) (*lnwire.ChannelUpdate, error) {
 			return nil, nil
 		},
-		Notifier:       &mockNotifier{},
-		FwdEventTicker: ticker.NewForce(DefaultFwdEventInterval),
-		LogEventTicker: ticker.NewForce(DefaultLogInterval),
-		AckEventTicker: ticker.NewForce(DefaultAckInterval),
-		HtlcNotifier:   &mockHTLCNotifier{},
+		Notifier:        &mockNotifier{},
+		FwdEventTicker:  ticker.NewForce(DefaultFwdEventInterval),
+		LogEventTicker:  ticker.NewForce(DefaultLogInterval),
+		AckEventTicker:  ticker.NewForce(DefaultAckInterval),
+		HtlcNotifier:    &mockHTLCNotifier{},
+		HtlcInterceptor: &mockHtlcInterceptor{},
 	}
 
 	return New(cfg, startingHeight)
@@ -1028,4 +1030,11 @@ func (h *mockHTLCNotifier) NotifyForwardingFailEvent(key HtlcKey,
 }
 
 func (h *mockHTLCNotifier) NotifySettleEvent(key HtlcKey, eventType HtlcEventType) {
+}
+
+type mockHtlcInterceptor struct{}
+
+func (m *mockHtlcInterceptor) InterceptForwardHtlc(channeldb.CircuitKey,
+	lnwire.UpdateAddHTLC, htlcinterceptor.ForwardResolver) bool {
+	return false
 }
