@@ -13,6 +13,7 @@ import (
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcutil"
 	"github.com/lightningnetwork/lnd/channeldb"
+	"github.com/lightningnetwork/lnd/htlcinterceptor"
 	"github.com/lightningnetwork/lnd/htlcswitch"
 	"github.com/lightningnetwork/lnd/lnrpc"
 	"github.com/lightningnetwork/lnd/lntypes"
@@ -73,6 +74,9 @@ type RouterBackend struct {
 	// SubscribeHtlcEvents returns a subscription client for the node's
 	// htlc events.
 	SubscribeHtlcEvents func() (*subscribe.Client, error)
+
+	// HtlcInterceptMiddleware exposes the ability to intercept forward events.
+	HtlcInterceptMiddleware *htlcinterceptor.Middleware
 }
 
 // MissionControl defines the mission control dependencies of routerrpc.

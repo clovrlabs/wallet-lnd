@@ -37,6 +37,7 @@ import (
 	"github.com/lightningnetwork/lnd/contractcourt"
 	"github.com/lightningnetwork/lnd/discovery"
 	"github.com/lightningnetwork/lnd/feature"
+	"github.com/lightningnetwork/lnd/htlcinterceptor"
 	"github.com/lightningnetwork/lnd/htlcswitch"
 	"github.com/lightningnetwork/lnd/htlcswitch/hop"
 	"github.com/lightningnetwork/lnd/input"
@@ -146,6 +147,8 @@ type server struct {
 	// listenAddrs is the list of addresses the server is currently
 	// listening on.
 	listenAddrs []net.Addr
+
+	htlcInterceptMiddleware *htlcinterceptor.Middleware
 
 	// torController is a client that will communicate with a locally
 	// running Tor server. This client will handle initiating and
@@ -322,6 +325,7 @@ func newServer(listenAddrs []net.Addr, chanDB *channeldb.DB,
 	towerClientDB *wtdb.ClientDB, cc *chainControl,
 	privKey *btcec.PrivateKey,
 	chansToRestore walletunlocker.ChannelsToRecover,
+	htlcInterceptMiddleware *htlcinterceptor.Middleware,
 	chanPredicate chanacceptor.ChannelAcceptor) (*server, error) {
 
 	var err error
@@ -424,6 +428,8 @@ func newServer(listenAddrs []net.Addr, chanDB *channeldb.DB,
 
 		listenAddrs: listenAddrs,
 
+		htlcInterceptMiddleware: htlcInterceptMiddleware,
+
 		// TODO(roasbeef): derive proper onion key based on rotation
 		// schedule
 		sphinx: hop.NewOnionProcessor(sphinxRouter),
@@ -493,6 +499,7 @@ func newServer(listenAddrs []net.Addr, chanDB *channeldb.DB,
 		AckEventTicker:         ticker.New(htlcswitch.DefaultAckInterval),
 		AllowCircularRoute:     cfg.AllowCircularRoute,
 		RejectHTLC:             cfg.RejectHTLC,
+		HtlcInterceptor:        htlcInterceptMiddleware,
 	}, uint32(currentHeight))
 	if err != nil {
 		return nil, err

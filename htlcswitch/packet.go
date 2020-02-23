@@ -83,6 +83,13 @@ type htlcPacket struct {
 	// the switch during successful forwarding.
 	circuit *PaymentCircuit
 
+	// intercepted is set to true when this packet was intercepted and handled
+	// outside of the switch. In the case where an htlc forward is intercepted
+	// and resolved manually, we don't have an opened circuit so we need to use
+	// the pending circuit instead.
+	// The switch is responsible for populating this field on manual resolving.
+	intercepted bool
+
 	// incomingTimeout is the timeout that the incoming HTLC carried. This
 	// is the timeout of the HTLC applied to the incoming link.
 	incomingTimeout uint32

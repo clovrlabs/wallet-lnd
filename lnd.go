@@ -38,6 +38,7 @@ import (
 	"github.com/lightningnetwork/lnd/cert"
 	"github.com/lightningnetwork/lnd/chanacceptor"
 	"github.com/lightningnetwork/lnd/channeldb"
+	"github.com/lightningnetwork/lnd/htlcinterceptor"
 	"github.com/lightningnetwork/lnd/keychain"
 	"github.com/lightningnetwork/lnd/lncfg"
 	"github.com/lightningnetwork/lnd/lnrpc"
@@ -538,11 +539,15 @@ func Main(lisCfg ListenerCfg) error {
 	// Initialize the ChainedAcceptor.
 	chainedAcceptor := chanacceptor.NewChainedAcceptor()
 
+	// Initialize the htlcMiddleware
+	htlcMiddleware := htlcinterceptor.NewMiddleware()
+
 	// Set up the core server which will listen for incoming peer
 	// connections.
 	server, err := newServer(
 		cfg.Listeners, chanDB, towerClientDB, activeChainControl,
-		idPrivKey, walletInitParams.ChansToRestore, chainedAcceptor,
+		idPrivKey, walletInitParams.ChansToRestore, htlcMiddleware,
+		chainedAcceptor,
 	)
 	if err != nil {
 		err := fmt.Errorf("Unable to create server: %v", err)

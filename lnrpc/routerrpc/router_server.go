@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync/atomic"
+	"time"
 
 	"github.com/btcsuite/btcutil"
 	"github.com/lightningnetwork/lnd/channeldb"
@@ -34,6 +35,10 @@ const (
 
 var (
 	errServerShuttingDown = errors.New("routerrpc server shutting down")
+
+	// defaultAcceptorTimeout is the time after which an interception request
+	// will time out and return false if it hasn't yet received a response.
+	defaultForwardInterceptionTimeout = 3 * time.Second
 
 	// macaroonOps are the set of capabilities that our minted macaroon (if
 	// it doesn't already exist) will have.
@@ -85,6 +90,14 @@ var (
 		"/routerrpc.Router/SubscribeHtlcEvents": {{
 			Entity: "offchain",
 			Action: "read",
+		}},
+		"/routerrpc.Router/ResolveHoldForward": {{
+			Entity: "offchain",
+			Action: "write",
+		}},
+		"/routerrpc.Router/HtlcInterceptor": {{
+			Entity: "offchain",
+			Action: "write",
 		}},
 	}
 
@@ -655,4 +668,193 @@ func (s *Server) SubscribeHtlcEvents(req *SubscribeHtlcEventsRequest,
 			return errServerShuttingDown
 		}
 	}
+}
+
+// htlcInterceptInfo is used in the HtlcInterceptor bidirectional stream and
+// encapsulates the request information sent from the HtlcForwardHandler to the
+// RPCServer.
+type htlcInterceptInfo struct {
+	inKey        channeldb.CircuitKey
+	htlc         lnwire.UpdateAddHTLC
+	responseChan chan bool
+}
+
+func (s *Server) HtlcInterceptor(stream Router_HtlcInterceptorServer) error {
+
+	// Create two channels to handle requests and responses respectively.
+	newRequests := make(chan *htlcInterceptInfo)
+	responses := make(chan ForwardHtlcInterceptResponse)
+
+	// Define a quit channel that will be used to signal to the HtlcForwardHandler
+	// whether the stream still exists.
+	quit := make(chan struct{})
+	defer close(quit)
+
+	// forwardHandler coordinates between the htlcinterceptor.Middleware and the
+	// RPC responses. It intercepts the Middleware requests, wait for the RPC response
+	// and send a synchronous result to the Middleware.
+	forwardHandler := func(inKey channeldb.CircuitKey,
+		htlc lnwire.UpdateAddHTLC) bool {
+
+		respChan := make(chan bool, 1)
+		newRequest := &htlcInterceptInfo{
+			inKey:        inKey,
+			htlc:         htlc,
+			responseChan: respChan,
+		}
+
+		// timeout is the time after which ForwardHtlcInterceptRequest expire.
+		timeout := time.After(defaultForwardInterceptionTimeout)
+
+		// Send the request to the newRequests channel.
+		select {
+		case newRequests <- newRequest:
+		case <-timeout:
+			log.Errorf("Forward handler returned false - reached timeout of %d",
+				defaultForwardInterceptionTimeout)
+			return false
+		case <-quit:
+			return false
+		case <-s.quit:
+			return false
+		}
+
+		// Receive the response and return it. If no response has been received
+		// in defaultForwardInterceptionTimeout, then return false.
+		select {
+		case resp := <-respChan:
+			return resp
+		case <-timeout:
+			log.Errorf("Forward handler returned false - reached timeout of %d",
+				defaultForwardInterceptionTimeout)
+			return false
+		case <-quit:
+			return false
+		case <-s.quit:
+			return false
+		}
+	}
+
+	// Add our forwardHandler to the Middleware.
+	interceptMiddleware := s.cfg.RouterBackend.HtlcInterceptMiddleware
+	handlerID := interceptMiddleware.AddForwardHtlcHandler(forwardHandler)
+	defer interceptMiddleware.RemoveForwardHtlcHandler(handlerID)
+
+	// errChan is used by the receive loop to signal any errors that occur
+	// during reading from the stream. This is primarily used to shutdown the
+	// send loop in the case of an RPC client disconnecting.
+	errChan := make(chan error, 1)
+
+	// Read user responses and dispatch them to the responses channel.
+	go func() {
+		for {
+			resp, err := stream.Recv()
+			if err != nil {
+				errChan <- err
+				return
+			}
+
+			// Now that we have the response from the RPC client, send it to
+			// the responses chan.
+			select {
+			case responses <- *resp:
+			case <-quit:
+				return
+			case <-s.quit:
+				return
+			}
+		}
+	}()
+
+	// Read both dispatched requests and responses.
+	// For every request send it over the user rpc stream to reach the caller.
+	// For every response coming back from the RPC stream signal its assigned
+	// response channel so the switch will have its result back.
+	pendingRequests := make(map[channeldb.CircuitKey]chan bool)
+	for {
+		select {
+		case newRequest := <-newRequests:
+
+			htlc := newRequest.htlc
+			inKey := newRequest.inKey
+			pendingRequests[inKey] = newRequest.responseChan
+
+			// A ChannelAcceptRequest has been received, send it to the client.
+			interceptionRequest := &ForwardHtlcInterceptRequest{
+				CircuitKey: &CircuitKey{
+					IncomingChanId: inKey.ChanID.ToUint64(),
+					HtlcId:         inKey.HtlcID,
+				},
+				HtlcPaymentHash: htlc.PaymentHash[:],
+				AmountSat:       uint64(htlc.Amount.ToSatoshis()),
+				Expiry:          htlc.Expiry,
+			}
+
+			if err := stream.Send(interceptionRequest); err != nil {
+				return err
+			}
+		case resp := <-responses:
+			// Look up the appropriate response channel to send on given
+			// the circuit key. If a channel is found, send the response over
+			// it.
+			circuitKey := channeldb.CircuitKey{
+				ChanID: lnwire.NewShortChanIDFromInt(resp.CircuitKey.IncomingChanId),
+				HtlcID: resp.CircuitKey.HtlcId,
+			}
+			respChan, ok := pendingRequests[circuitKey]
+			if !ok {
+				continue
+			}
+
+			// Send the response boolean over the buffered response channel.
+			respChan <- resp.Hold
+
+			// Delete the channel from the acceptRequests map.
+			delete(pendingRequests, circuitKey)
+		case err := <-errChan:
+			log.Errorf("Received an error: %v, shutting down", err)
+			return err
+		case <-s.quit:
+			return fmt.Errorf("RPC server is shutting down")
+		}
+	}
+}
+
+// ResolveHoldForward resolves a previousely intercepted forward by either
+// Resume, Fail or Settle. In case of settle a valid preimage needs to be
+// populated.
+func (s *Server) ResolveHoldForward(ctx context.Context,
+	in *ResolveHoldForwardRequest) (*ResolveHoldForwardResponse, error) {
+
+	circuitKey := channeldb.CircuitKey{
+		ChanID: lnwire.NewShortChanIDFromInt(in.CircuitKey.IncomingChanId),
+		HtlcID: in.CircuitKey.HtlcId,
+	}
+	interceptMiddleware := s.cfg.RouterBackend.HtlcInterceptMiddleware
+
+	switch in.Action {
+	case ResolveHoldForwardAction_RESUME:
+		if err := interceptMiddleware.ResumeHoldForward(circuitKey); err != nil {
+			return nil, err
+		}
+	case ResolveHoldForwardAction_FAIL:
+		if err := interceptMiddleware.FailHoldForward(circuitKey); err != nil {
+			return nil, err
+		}
+	case ResolveHoldForwardAction_SETTLE:
+		if in.RPreimage == nil {
+			return nil, errors.New("missing preimage")
+		}
+		preimage, err := lntypes.MakePreimage(in.RPreimage)
+		if err != nil {
+			return nil, err
+		}
+		if err := interceptMiddleware.SettleHoldForward(circuitKey, preimage); err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("unrecognized resolve action %v", in.Action)
+	}
+
+	return &ResolveHoldForwardResponse{}, nil
 }

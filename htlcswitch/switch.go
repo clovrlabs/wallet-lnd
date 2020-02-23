@@ -15,6 +15,7 @@ import (
 	"github.com/lightningnetwork/lnd/channeldb"
 	"github.com/lightningnetwork/lnd/channeldb/kvdb"
 	"github.com/lightningnetwork/lnd/contractcourt"
+	"github.com/lightningnetwork/lnd/htlcinterceptor"
 	"github.com/lightningnetwork/lnd/htlcswitch/hop"
 	"github.com/lightningnetwork/lnd/lntypes"
 	"github.com/lightningnetwork/lnd/lnwallet"
@@ -62,6 +63,52 @@ var (
 	// cannot be decrypted.
 	ErrUnreadableFailureMessage = errors.New("unreadable failure message")
 )
+
+// forwardResolver implements the htlcinterceptor.ForwardResolver interface.
+// It is passed from the switch to external interceptors that are interested
+// in holding forwards and resolve them manually.
+type forwardResolver struct {
+	packet     *htlcPacket
+	htlcSwitch *Switch
+}
+
+// Resume resumes the default behavior as if the packet was not intercepted.
+func (h *forwardResolver) Resume() error {
+	pkt := *h.packet
+	pkt.intercepted = true
+	return h.htlcSwitch.route(&pkt)
+}
+
+// Fail forward a failed packet to the switch.
+func (h *forwardResolver) Fail() error {
+	return h.resolve(&lnwire.UpdateFailHTLC{})
+}
+
+// Settle forwards a settled packet to the switch.
+func (h *forwardResolver) Settle(preimage lntypes.Preimage) error {
+	return h.resolve(&lnwire.UpdateFulfillHTLC{
+		PaymentPreimage: preimage,
+	})
+}
+
+// resolve is used for both Settle and Fail and forwards the message to the
+// switch. When creating the forwarded packet this method also populates the
+// intercepted field which enables the switch to find the circuit before
+// forwarding the result to the incoming link, this is needed because
+// intercepted packets don't have an opened circuit in the switch as they were
+// intercepted before they made it to the outgoing link.
+func (h *forwardResolver) resolve(message lnwire.Message) error {
+	pkt := &htlcPacket{
+		outgoingChanID: h.packet.outgoingChanID,
+		outgoingHTLCID: h.packet.outgoingHTLCID,
+		isResolution:   true,
+		circuit:        h.packet.circuit,
+		intercepted:    true,
+		htlc:           message,
+	}
+	err := h.htlcSwitch.route(pkt)
+	return err
+}
 
 // plexPacket encapsulates switch packet and adds error channel to receive
 // error from request handler.
@@ -173,6 +220,10 @@ type Config struct {
 	// RejectHTLC is a flag that instructs the htlcswitch to reject any
 	// HTLCs that are not from the source hop.
 	RejectHTLC bool
+
+	// HtlcInterceptor allows intercepting incoming htlcs and override the
+	// default forward behavior.
+	HtlcInterceptor htlcinterceptor.Interceptor
 }
 
 // Switch is the central messaging bus for all incoming/outgoing HTLCs.
@@ -1018,6 +1069,35 @@ func (s *Switch) parseFailedPayment(deobfuscator ErrorDecrypter,
 	}
 }
 
+// interceptForward checks if there is any external interceptor interested in
+// this packet. Currently only htlc type of UpdateAddHTLC that are forwarded
+// are being checked for interception. It can be extended in the future given
+// given the right use case.
+func (s *Switch) interceptForward(packet *htlcPacket) bool {
+	switch htlc := packet.htlc.(type) {
+	case *lnwire.UpdateAddHTLC:
+		// We are not interested in intercepting initated payments.
+		if packet.incomingChanID == hop.Source {
+			return false
+		}
+
+		circuitKey := channeldb.CircuitKey{
+			ChanID: packet.incomingChanID,
+			HtlcID: packet.incomingHTLCID,
+		}
+		forwardResolver := &forwardResolver{
+			packet:     packet,
+			htlcSwitch: s,
+		}
+
+		// If this htlc was intercepted, don't handle the forward.
+		return s.cfg.HtlcInterceptor.InterceptForwardHtlc(
+			circuitKey, *htlc, forwardResolver)
+	default:
+		return false
+	}
+}
+
 // handlePacketForward is used in cases when we need forward the htlc update
 // from one channel link to another and be able to propagate the settle/fail
 // updates back. This behaviour is achieved by creation of payment circuits.
@@ -1370,7 +1450,19 @@ func (s *Switch) closeCircuit(pkt *htlcPacket) (*PaymentCircuit, error) {
 
 	// Otherwise, this is packet was received from the remote party.  Use
 	// circuit map to find the incoming link to receive the settle/fail.
-	circuit, err := s.circuits.CloseCircuit(pkt.outKey())
+	var circuit *PaymentCircuit
+	var err error
+	if pkt.intercepted {
+		// In case we got the circuitInKey populated it means that we should
+		// use it to find the circuit as there is no open circuit probably due
+		// to interception of this packet.
+		circuit = s.circuits.LookupCircuit(pkt.circuit.InKey())
+		if circuit == nil {
+			err = ErrUnknownCircuit
+		}
+	} else {
+		circuit, err = s.circuits.CloseCircuit(pkt.outKey())
+	}
 	switch err {
 
 	// Open circuit successfully closed.
@@ -1682,6 +1774,12 @@ out:
 		// packet concretely, then either forward it along, or
 		// interpret a return packet to a locally initialized one.
 		case cmd := <-s.htlcPlex:
+			// We allow first to external handlers to intercept this packet.
+			// In case it was intercepted we skip the default paket handling.
+			if !cmd.pkt.intercepted && s.interceptForward(cmd.pkt) {
+				cmd.err <- nil
+				continue
+			}
 			cmd.err <- s.handlePacketForward(cmd.pkt)
 
 		// When this time ticks, then it indicates that we should
