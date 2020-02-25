@@ -135,6 +135,9 @@ type ChainNotifier interface {
 	// current tip of the chain upon a successful registration.
 	RegisterBlockEpochNtfn(*BlockEpoch) (*BlockEpochEvent, error)
 
+	// GetBlock returns a raw block from the server given its hash.
+	GetBlock(*chainhash.Hash) (*wire.MsgBlock, error)
+
 	// Start the ChainNotifier. Once started, the implementation should be
 	// ready, and able to receive notification registrations from clients.
 	Start() error

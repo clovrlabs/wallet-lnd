@@ -924,6 +924,11 @@ func (m *mockNotifier) RegisterBlockEpochNtfn(
 	}, nil
 }
 
+func (m *mockNotifier) GetBlock(hash *chainhash.Hash) (*wire.MsgBlock, error) {
+	var b wire.MsgBlock
+	return &b, nil
+}
+
 func (m *mockNotifier) Start() error {
 	return nil
 }

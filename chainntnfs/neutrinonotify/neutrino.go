@@ -200,6 +200,15 @@ func (n *NeutrinoNotifier) Stop() error {
 	return nil
 }
 
+// GetBlock returns a raw block from the server given its hash.
+func (n *NeutrinoNotifier) GetBlock(hash *chainhash.Hash) (*wire.MsgBlock, error) {
+	b, err := n.chainConn.p2pNode.GetBlock(*hash)
+	if err != nil {
+		return nil, err
+	}
+	return b.MsgBlock(), nil
+}
+
 // filteredBlock represents a new block which has been connected to the main
 // chain. The slice of transactions will only be populated if the block
 // includes a transaction that confirmed one of our watched txids, or spends

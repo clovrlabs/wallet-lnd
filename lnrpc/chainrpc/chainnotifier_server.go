@@ -51,6 +51,10 @@ var (
 			Entity: "onchain",
 			Action: "read",
 		}},
+		"/chainrpc.ChainNotifier/GetBlock": {{
+			Entity: "onchain",
+			Action: "read",
+		}},
 	}
 
 	// DefaultChainNotifierMacFilename is the default name of the chain
@@ -450,4 +454,21 @@ func (s *Server) RegisterBlockEpochNtfn(in *BlockEpoch,
 			return ErrChainNotifierServerShuttingDown
 		}
 	}
+}
+
+func (s *Server) GetBlock(ctx context.Context, in *BlockRequest) (*BlockData, error) {
+	h, err := chainhash.NewHash(in.Hash)
+	if err != nil {
+		return nil, err
+	}
+	b, err := s.cfg.ChainNotifier.GetBlock(h)
+	if err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	err = b.Serialize(&buf)
+	if err != nil {
+		return nil, err
+	}
+	return &BlockData{Data: buf.Bytes()}, nil
 }

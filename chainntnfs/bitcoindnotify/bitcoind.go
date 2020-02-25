@@ -158,6 +158,11 @@ func (b *BitcoindNotifier) Stop() error {
 	return nil
 }
 
+// GetBlock returns a raw block from the server given its hash.
+func (b *BitcoindNotifier) GetBlock(hash *chainhash.Hash) (*wire.MsgBlock, error) {
+	return b.chainConn.GetBlock(hash)
+}
+
 // notificationDispatcher is the primary goroutine which handles client
 // notification registrations, as well as notification dispatches.
 func (b *BitcoindNotifier) notificationDispatcher() {

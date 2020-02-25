@@ -212,6 +212,11 @@ func (b *BtcdNotifier) Stop() error {
 	return nil
 }
 
+// GetBlock returns a raw block from the server given its hash.
+func (b *BtcdNotifier) GetBlock(hash *chainhash.Hash) (*wire.MsgBlock, error) {
+	return b.chainConn.GetBlock(hash)
+}
+
 // onBlockConnected implements on OnBlockConnected callback for rpcclient.
 // Ingesting a block updates the wallet's internal utxo state based on the
 // outputs created and destroyed within each block.

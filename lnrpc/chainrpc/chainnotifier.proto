@@ -140,6 +140,14 @@ message BlockEpoch {
     uint32 height = 2;
 }
 
+message BlockRequest {
+    bytes hash = 1;
+}
+
+message BlockData {
+    bytes data = 1;
+}
+
 service ChainNotifier {
     /*
     RegisterConfirmationsNtfn is a synchronous response-streaming RPC that
@@ -174,4 +182,6 @@ service ChainNotifier {
     missing processing a single block within the chain.
     */
     rpc RegisterBlockEpochNtfn(BlockEpoch) returns (stream BlockEpoch);
+
+    rpc GetBlock(BlockRequest) returns (BlockData);
 }
