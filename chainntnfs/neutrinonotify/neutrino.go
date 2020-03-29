@@ -766,7 +766,7 @@ func (n *NeutrinoNotifier) RegisterSpendNtfn(outpoint *wire.OutPoint,
 			neutrino.EndBlock(&headerfs.BlockStamp{
 				Height: int32(ntfn.HistoricalDispatch.EndHeight),
 			}),
-			neutrino.UtxoScannerProgressHandler(
+			neutrino.ProgressHandler(
 				func(processedHeight uint32) {
 					if processedHeight > lastProcessedHeight {
 						lastProcessedHeight = processedHeight
