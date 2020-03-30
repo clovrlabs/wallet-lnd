@@ -24,7 +24,7 @@ func main() {
 	// Call the "real" main in a nested manner so the defers will properly
 	// be executed in the case of a graceful shutdown.
 	err = lnd.Main(
-		loadedConfig, lnd.ListenerCfg{}, signal.ShutdownChannel(),
+		loadedConfig, lnd.ListenerCfg{}, signal.ShutdownChannel(), nil,
 	)
 	if err != nil {
 		if e, ok := err.(*flags.Error); ok && e.Type == flags.ErrHelp {
