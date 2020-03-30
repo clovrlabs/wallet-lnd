@@ -62,6 +62,7 @@ import (
 	"github.com/lightningnetwork/lnd/zpay32"
 	"github.com/tv42/zbase32"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/test/bufconn"
 	"gopkg.in/macaroon-bakery.v2/bakery"
 )
 
@@ -77,7 +78,12 @@ const (
 )
 
 var (
-	// MaxPaymentMSat is the maximum allowed payment currently permitted as
+	//MemoryRPCListener is used to enable in memory grpc API usage
+	memoryRPCListener *bufconn.Listener
+
+	zeroHash [32]byte
+
+	// maxPaymentMSat is the maximum allowed payment currently permitted as
 	// defined in BOLT-002. This value depends on which chain is active.
 	// It is set to the value under the Bitcoin chain as default.
 	MaxPaymentMSat = maxBtcPaymentMSat
@@ -749,6 +755,18 @@ func (r *rpcServer) Start() error {
 			return err
 		}
 	}
+	if cfg.RPCMemListen {
+		memoryRPCListener = bufconn.Listen(100)
+
+		r.listenerCleanUp = append(r.listenerCleanUp, func() {
+			memoryRPCListener.Close()
+		})
+
+		go func() {
+			rpcsLog.Infof("RPC server listening on %s", memoryRPCListener.Addr())
+			r.grpcServer.Serve(memoryRPCListener)
+		}()
+	}
 
 	// The default JSON marshaler of the REST proxy only sets OrigName to
 	// true, which instructs it to use the same field names as specified in
@@ -831,6 +849,14 @@ func (r *rpcServer) Stop() error {
 	}
 
 	return nil
+}
+
+//MemDial returns a net.Conn for in-memory RPC
+func MemDial() (net.Conn, error) {
+	if memoryRPCListener == nil {
+		return nil, errors.New("Memory RPC is not configured")
+	}
+	return memoryRPCListener.Dial()
 }
 
 // addrPairsToOutputs converts a map describing a set of outputs to be created,
