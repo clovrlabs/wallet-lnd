@@ -750,6 +750,7 @@ func (n *NeutrinoNotifier) RegisterSpendNtfn(outpoint *wire.OutPoint,
 			}
 		}
 
+		lastProcessedHeight := ntfn.HistoricalDispatch.StartHeight
 		spendReport, err := n.p2pNode.GetUtxo(
 			neutrino.WatchInputs(inputToWatch),
 			neutrino.StartBlock(&headerfs.BlockStamp{
@@ -758,6 +759,15 @@ func (n *NeutrinoNotifier) RegisterSpendNtfn(outpoint *wire.OutPoint,
 			neutrino.EndBlock(&headerfs.BlockStamp{
 				Height: int32(ntfn.HistoricalDispatch.EndHeight),
 			}),
+			neutrino.ScannerProgressHandler(
+				func(processedHeight uint32) {
+					if processedHeight > lastProcessedHeight {
+						lastProcessedHeight = processedHeight
+						n.spendHintCache.CommitSpendHint(
+							lastProcessedHeight,
+							ntfn.HistoricalDispatch.SpendRequest)
+					}
+				}),
 			neutrino.QuitChan(n.quit),
 		)
 		if err != nil && !strings.Contains(err.Error(), "not found") {
