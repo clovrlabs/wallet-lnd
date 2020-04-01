@@ -257,6 +257,7 @@ type config struct {
 	// loadConfig function. We need to expose the 'raw' strings so the
 	// command line library can access them.
 	// Only the parsed net.Addrs should be used!
+	RPCMemListen     bool     `long:"rpcmemlisten" description:"Enable in-memory rpc using bufconn"`
 	RawRPCListeners  []string `long:"rpclisten" description:"Add an interface/port/socket to listen for RPC connections"`
 	RawRESTListeners []string `long:"restlisten" description:"Add an interface/port/socket to listen for REST connections"`
 	RawListeners     []string `long:"listen" description:"Add an interface/port to listen for peer connections"`
@@ -996,13 +997,13 @@ func loadConfig() (*config, error) {
 
 	// At least one RPCListener is required. So listen on localhost per
 	// default.
-	if len(cfg.RawRPCListeners) == 0 {
+	if len(cfg.RawRPCListeners) == 0 && !cfg.RPCMemListen {
 		addr := fmt.Sprintf("localhost:%d", defaultRPCPort)
 		cfg.RawRPCListeners = append(cfg.RawRPCListeners, addr)
 	}
 
 	// Listen on localhost if no REST listeners were specified.
-	if len(cfg.RawRESTListeners) == 0 {
+	if len(cfg.RawRESTListeners) == 0 && !cfg.RPCMemListen {
 		addr := fmt.Sprintf("localhost:%d", defaultRESTPort)
 		cfg.RawRESTListeners = append(cfg.RawRESTListeners, addr)
 	}

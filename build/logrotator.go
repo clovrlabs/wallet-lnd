@@ -59,6 +59,10 @@ func (r *RotatingLogWriter) RegisterSubLogger(subsystem string,
 func (r *RotatingLogWriter) InitLogRotator(logFile string, maxLogFileSize int,
 	maxLogFiles int) error {
 
+	if r.logWriter.RotatorPipe != nil {
+		return nil
+	}
+
 	logDir, _ := filepath.Split(logFile)
 	err := os.MkdirAll(logDir, 0700)
 	if err != nil {
@@ -86,6 +90,10 @@ func (r *RotatingLogWriter) InitLogRotator(logFile string, maxLogFileSize int,
 
 	r.logWriter.RotatorPipe = pw
 	return nil
+}
+
+func (r *RotatingLogWriter) InitLogRotatorPipe(pw *io.PipeWriter) {
+	r.logWriter.RotatorPipe = pw
 }
 
 // Close closes the underlying log rotator if it has already been created.
