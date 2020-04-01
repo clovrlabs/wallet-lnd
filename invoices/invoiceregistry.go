@@ -230,12 +230,13 @@ func (i *InvoiceRegistry) Start() error {
 }
 
 // Stop signals the registry for a graceful shutdown.
-func (i *InvoiceRegistry) Stop() {
+func (i *InvoiceRegistry) Stop() error {
 	i.expiryWatcher.Stop()
 
 	close(i.quit)
 
 	i.wg.Wait()
+	return nil
 }
 
 // invoiceEvent represents a new event that has modified on invoice on disk.
