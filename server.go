@@ -1315,7 +1315,7 @@ func (s *server) Start() error {
 				return
 			}
 			cleanup = cleanup.add(s.towerClient.Stop)
-		}		
+		}
 
 		if err := s.htlcSwitch.Start(); err != nil {
 			startErr = err
@@ -1381,6 +1381,10 @@ func (s *server) Start() error {
 			startErr = err
 			return
 		}
+		cleanup = cleanup.add(func() error {
+			s.chanEventStore.Stop()
+			return nil
+		})
 
 		// Before we start the connMgr, we'll check to see if we have
 		// any backups to recover. We do this now as we want to ensure
