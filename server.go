@@ -1391,7 +1391,10 @@ func (s *server) Start() error {
 			startErr = err
 			return
 		}
-		cleanup = cleanup.add(s.chanEventStore.Stop)
+		cleanup = cleanup.add(func() error {
+			s.chanEventStore.Stop()
+			return nil
+		})
 
 		// Before we start the connMgr, we'll check to see if we have
 		// any backups to recover. We do this now as we want to ensure

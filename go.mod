@@ -17,10 +17,10 @@ require (
 	github.com/coreos/bbolt v1.3.3
 	github.com/davecgh/go-spew v1.1.1
 	github.com/go-errors/errors v1.0.1
-	github.com/golang/protobuf v1.3.1
+	github.com/golang/protobuf v1.3.3
 	github.com/grpc-ecosystem/go-grpc-middleware v1.0.0
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
-	github.com/grpc-ecosystem/grpc-gateway v1.8.6
+	github.com/grpc-ecosystem/grpc-gateway v1.14.3
 	github.com/jackpal/gateway v1.0.5
 	github.com/jackpal/go-nat-pmp v0.0.0-20170405195558-28a68d0c24ad
 	github.com/jessevdk/go-flags v1.4.0
@@ -42,18 +42,20 @@ require (
 	github.com/ltcsuite/ltcd v0.0.0-20190101042124-f37f8bf35796
 	github.com/miekg/dns v0.0.0-20171125082028-79bfde677fa8
 	github.com/prometheus/client_golang v0.9.3
-	github.com/rogpeppe/fastuuid v1.2.0 // indirect
+	github.com/stretchr/testify v1.5.1 // indirect
 	github.com/tv42/zbase32 v0.0.0-20160707012821-501572607d02
 	github.com/urfave/cli v1.18.0
 	golang.org/x/crypto v0.0.0-20200109152110-61a87790db17
-	golang.org/x/net v0.0.0-20190404232315-eb5bcb51f2a3
+	golang.org/x/net v0.0.0-20191002035440-2ec189313ef0
+	golang.org/x/text v0.3.2 // indirect
 	golang.org/x/time v0.0.0-20180412165947-fbb02b2291d2
-	google.golang.org/genproto v0.0.0-20190201180003-4b09977fb922
-	google.golang.org/grpc v1.19.0
+	google.golang.org/genproto v0.0.0-20190927181202-20e1ac93f88c
+	google.golang.org/grpc v1.28.0
 	gopkg.in/errgo.v1 v1.0.1 // indirect
 	gopkg.in/macaroon-bakery.v2 v2.0.1
 	gopkg.in/macaroon.v2 v2.0.0
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22 // indirect
+	gopkg.in/resty.v1 v1.12.0 // indirect
 )
 
 replace github.com/lightningnetwork/lnd/ticker => ./ticker
