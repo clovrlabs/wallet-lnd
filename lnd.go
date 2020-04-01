@@ -150,8 +150,11 @@ type rpcListeners func() ([]*ListenerWithSignal, func(), error)
 // created in the top-level scope of a main method aren't executed if os.Exit()
 // is called.
 func Main(lisCfg ListenerCfg) error {
-	// Hook interceptor for os signals.
-	signal.Intercept()
+	//Start the signal that is responsible for shutdown
+	if err := signal.Intercept(); err != nil {
+		ltndLog.Errorf("failed to start signal %v", err)
+		return err
+	}
 
 	// Load the configuration, and parse any command line options. This
 	// function will also set up logging properly.
