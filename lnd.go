@@ -163,7 +163,7 @@ type Dependencies interface {
 // Main is the true entry point for lnd. This function is required since defers
 // created in the top-level scope of a main method aren't executed if os.Exit()
 // is called.
-func Main(lisCfg ListenerCfg) error {
+func Main(lisCfg ListenerCfg, args []string, deps Dependencies) error {
 	//Start the signal that is responsible for shutdown
 	if err := signal.Intercept(); err != nil {
 		ltndLog.Errorf("failed to start signal %v", err)
