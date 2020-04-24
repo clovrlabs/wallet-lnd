@@ -34,7 +34,8 @@ const (
 type BitcoindNotifier struct {
 	epochClientCounter uint64 // To be used atomically.
 
-	started int32 // To be used atomically.
+	start   sync.Once
+	active  int32 // To be used atomically.
 	stopped int32 // To be used atomically.
 
 	chainConn   *chain.BitcoindClient
@@ -96,39 +97,44 @@ func New(chainConn *chain.BitcoindConn, chainParams *chaincfg.Params,
 // Start connects to the running bitcoind node over websockets, registers for
 // block notifications, and finally launches all related helper goroutines.
 func (b *BitcoindNotifier) Start() error {
-	// Already started?
-	if atomic.AddInt32(&b.started, 1) != 1 {
-		return nil
-	}
+	var startErr error
 
-	// Connect to bitcoind, and register for notifications on connected,
-	// and disconnected blocks.
-	if err := b.chainConn.Start(); err != nil {
-		return err
-	}
-	if err := b.chainConn.NotifyBlocks(); err != nil {
-		return err
-	}
+	b.start.Do(func() {
 
-	currentHash, currentHeight, err := b.chainConn.GetBestBlock()
-	if err != nil {
-		return err
-	}
+		// Connect to bitcoind, and register for notifications on connected,
+		// and disconnected blocks.
+		if err := b.chainConn.Start(); err != nil {
+			startErr = err
+			return
+		}
+		if err := b.chainConn.NotifyBlocks(); err != nil {
+			startErr = err
+			return
+		}
 
-	b.txNotifier = chainntnfs.NewTxNotifier(
-		uint32(currentHeight), chainntnfs.ReorgSafetyLimit,
-		b.confirmHintCache, b.spendHintCache,
-	)
+		currentHash, currentHeight, err := b.chainConn.GetBestBlock()
+		if err != nil {
+			startErr = err
+			return
+		}
 
-	b.bestBlock = chainntnfs.BlockEpoch{
-		Height: currentHeight,
-		Hash:   currentHash,
-	}
+		b.txNotifier = chainntnfs.NewTxNotifier(
+			uint32(currentHeight), chainntnfs.ReorgSafetyLimit,
+			b.confirmHintCache, b.spendHintCache,
+		)
 
-	b.wg.Add(1)
-	go b.notificationDispatcher()
+		b.bestBlock = chainntnfs.BlockEpoch{
+			Height: currentHeight,
+			Hash:   currentHash,
+		}
 
-	return nil
+		b.wg.Add(1)
+		go b.notificationDispatcher()
+
+		atomic.StoreInt32(&b.active, 1)
+	})
+
+	return startErr
 }
 
 // Stop shutsdown the BitcoindNotifier.
@@ -156,6 +162,11 @@ func (b *BitcoindNotifier) Stop() error {
 	b.txNotifier.TearDown()
 
 	return nil
+}
+
+// Started returns true if this instance has been started, and false otherwise.
+func (b *BitcoindNotifier) Started() bool {
+	return atomic.LoadInt32(&b.active) != 0
 }
 
 // notificationDispatcher is the primary goroutine which handles client

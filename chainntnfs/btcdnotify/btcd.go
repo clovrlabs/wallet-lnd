@@ -53,7 +53,8 @@ type txUpdate struct {
 type BtcdNotifier struct {
 	epochClientCounter uint64 // To be used atomically.
 
-	started int32 // To be used atomically.
+	start   sync.Once
+	active  int32 // To be used atomically.
 	stopped int32 // To be used atomically.
 
 	chainConn   *rpcclient.Client
@@ -134,52 +135,56 @@ func New(config *rpcclient.ConnConfig, chainParams *chaincfg.Params,
 // Start connects to the running btcd node over websockets, registers for block
 // notifications, and finally launches all related helper goroutines.
 func (b *BtcdNotifier) Start() error {
-	// Already started?
-	if atomic.AddInt32(&b.started, 1) != 1 {
-		return nil
-	}
+	var startErr error
 
-	// Start our concurrent queues before starting the chain connection, to
-	// ensure onBlockConnected and onRedeemingTx callbacks won't be
-	// blocked.
-	b.chainUpdates.Start()
-	b.txUpdates.Start()
+	b.start.Do(func() {
+		// Start our concurrent queues before starting the chain connection, to
+		// ensure onBlockConnected and onRedeemingTx callbacks won't be
+		// blocked.
+		b.chainUpdates.Start()
+		b.txUpdates.Start()
 
-	// Connect to btcd, and register for notifications on connected, and
-	// disconnected blocks.
-	if err := b.chainConn.Connect(20); err != nil {
-		b.txUpdates.Stop()
-		b.chainUpdates.Stop()
-		return err
-	}
+		// Connect to btcd, and register for notifications on connected, and
+		// disconnected blocks.
+		if err := b.chainConn.Connect(20); err != nil {
+			b.txUpdates.Stop()
+			b.chainUpdates.Stop()
+			startErr = err
+			return
+		}
 
-	currentHash, currentHeight, err := b.chainConn.GetBestBlock()
-	if err != nil {
-		b.txUpdates.Stop()
-		b.chainUpdates.Stop()
-		return err
-	}
+		currentHash, currentHeight, err := b.chainConn.GetBestBlock()
+		if err != nil {
+			b.txUpdates.Stop()
+			b.chainUpdates.Stop()
+			startErr = err
+			return
+		}
 
-	b.txNotifier = chainntnfs.NewTxNotifier(
-		uint32(currentHeight), chainntnfs.ReorgSafetyLimit,
-		b.confirmHintCache, b.spendHintCache,
-	)
+		b.txNotifier = chainntnfs.NewTxNotifier(
+			uint32(currentHeight), chainntnfs.ReorgSafetyLimit,
+			b.confirmHintCache, b.spendHintCache,
+		)
 
-	b.bestBlock = chainntnfs.BlockEpoch{
-		Height: currentHeight,
-		Hash:   currentHash,
-	}
+		b.bestBlock = chainntnfs.BlockEpoch{
+			Height: currentHeight,
+			Hash:   currentHash,
+		}
 
-	if err := b.chainConn.NotifyBlocks(); err != nil {
-		b.txUpdates.Stop()
-		b.chainUpdates.Stop()
-		return err
-	}
+		if err := b.chainConn.NotifyBlocks(); err != nil {
+			b.txUpdates.Stop()
+			b.chainUpdates.Stop()
+			startErr = err
+			return
+		}
 
-	b.wg.Add(1)
-	go b.notificationDispatcher()
+		b.wg.Add(1)
+		go b.notificationDispatcher()
 
-	return nil
+		atomic.StoreInt32(&b.active, 1)
+	})
+
+	return startErr
 }
 
 // Stop shutsdown the BtcdNotifier.
@@ -210,6 +215,11 @@ func (b *BtcdNotifier) Stop() error {
 	b.txNotifier.TearDown()
 
 	return nil
+}
+
+// Started returns true if this instance has been started, and false otherwise.
+func (b *BtcdNotifier) Started() bool {
+	return atomic.LoadInt32(&b.active) != 0
 }
 
 // onBlockConnected implements on OnBlockConnected callback for rpcclient.

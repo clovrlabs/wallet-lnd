@@ -39,7 +39,8 @@ const (
 type NeutrinoNotifier struct {
 	epochClientCounter uint64 // To be used atomically.
 
-	started int32 // To be used atomically.
+	start   sync.Once
+	active  int32 // To be used atomically.
 	stopped int32 // To be used atomically.
 
 	bestBlockMtx sync.RWMutex
@@ -111,67 +112,71 @@ func New(node *neutrino.ChainService, spendHintCache chainntnfs.SpendHintCache,
 // Start contacts the running neutrino light client and kicks off an initial
 // empty rescan.
 func (n *NeutrinoNotifier) Start() error {
-	// Already started?
-	if atomic.AddInt32(&n.started, 1) != 1 {
-		return nil
-	}
+	var startErr error
 
-	// Start our concurrent queues before starting the rescan, to ensure
-	// onFilteredBlockConnected and onRelavantTx callbacks won't be
-	// blocked.
-	n.chainUpdates.Start()
-	n.txUpdates.Start()
+	n.start.Do(func() {
+		// Start our concurrent queues before starting the rescan, to ensure
+		// onFilteredBlockConnected and onRelavantTx callbacks won't be
+		// blocked.
+		n.chainUpdates.Start()
+		n.txUpdates.Start()
 
-	// First, we'll obtain the latest block height of the p2p node. We'll
-	// start the auto-rescan from this point. Once a caller actually wishes
-	// to register a chain view, the rescan state will be rewound
-	// accordingly.
-	startingPoint, err := n.p2pNode.BestBlock()
-	if err != nil {
-		n.txUpdates.Stop()
-		n.chainUpdates.Stop()
-		return err
-	}
-	n.bestBlock.Hash = &startingPoint.Hash
-	n.bestBlock.Height = startingPoint.Height
+		// First, we'll obtain the latest block height of the p2p node. We'll
+		// start the auto-rescan from this point. Once a caller actually wishes
+		// to register a chain view, the rescan state will be rewound
+		// accordingly.
+		startingPoint, err := n.p2pNode.BestBlock()
+		if err != nil {
+			n.txUpdates.Stop()
+			n.chainUpdates.Stop()
+			startErr = err
+			return
+		}
+		n.bestBlock.Hash = &startingPoint.Hash
+		n.bestBlock.Height = startingPoint.Height
 
-	n.txNotifier = chainntnfs.NewTxNotifier(
-		uint32(n.bestBlock.Height), chainntnfs.ReorgSafetyLimit,
-		n.confirmHintCache, n.spendHintCache,
-	)
+		n.txNotifier = chainntnfs.NewTxNotifier(
+			uint32(n.bestBlock.Height), chainntnfs.ReorgSafetyLimit,
+			n.confirmHintCache, n.spendHintCache,
+		)
 
-	// Next, we'll create our set of rescan options. Currently it's
-	// required that a user MUST set an addr/outpoint/txid when creating a
-	// rescan. To get around this, we'll add a "zero" outpoint, that won't
-	// actually be matched.
-	var zeroInput neutrino.InputWithScript
-	rescanOptions := []neutrino.RescanOption{
-		neutrino.StartBlock(startingPoint),
-		neutrino.QuitChan(n.quit),
-		neutrino.NotificationHandlers(
-			rpcclient.NotificationHandlers{
-				OnFilteredBlockConnected:    n.onFilteredBlockConnected,
-				OnFilteredBlockDisconnected: n.onFilteredBlockDisconnected,
-				OnRedeemingTx:               n.onRelevantTx,
+		// Next, we'll create our set of rescan options. Currently it's
+		// required that a user MUST set an addr/outpoint/txid when creating a
+		// rescan. To get around this, we'll add a "zero" outpoint, that won't
+		// actually be matched.
+		var zeroInput neutrino.InputWithScript
+		rescanOptions := []neutrino.RescanOption{
+			neutrino.StartBlock(startingPoint),
+			neutrino.QuitChan(n.quit),
+			neutrino.NotificationHandlers(
+				rpcclient.NotificationHandlers{
+					OnFilteredBlockConnected:    n.onFilteredBlockConnected,
+					OnFilteredBlockDisconnected: n.onFilteredBlockDisconnected,
+					OnRedeemingTx:               n.onRelevantTx,
+				},
+			),
+			neutrino.WatchInputs(zeroInput),
+		}
+
+		// Finally, we'll create our rescan struct, start it, and launch all
+		// the goroutines we need to operate this ChainNotifier instance.
+		n.chainView = neutrino.NewRescan(
+			&neutrino.RescanChainSource{
+				ChainService: n.p2pNode,
 			},
-		),
-		neutrino.WatchInputs(zeroInput),
-	}
+			rescanOptions...,
+		)
+		n.rescanErr = n.chainView.Start()
 
-	// Finally, we'll create our rescan struct, start it, and launch all
-	// the goroutines we need to operate this ChainNotifier instance.
-	n.chainView = neutrino.NewRescan(
-		&neutrino.RescanChainSource{
-			ChainService: n.p2pNode,
-		},
-		rescanOptions...,
-	)
-	n.rescanErr = n.chainView.Start()
+		n.wg.Add(1)
+		go n.notificationDispatcher()
 
-	n.wg.Add(1)
-	go n.notificationDispatcher()
+		// Set the active flag now that we've completed the full
+		// startup.
+		atomic.StoreInt32(&n.active, 1)
+	})
 
-	return nil
+	return startErr
 }
 
 // Stop shuts down the NeutrinoNotifier.
@@ -198,6 +203,11 @@ func (n *NeutrinoNotifier) Stop() error {
 	n.txNotifier.TearDown()
 
 	return nil
+}
+
+// Started returns true if this instance has been started, and false otherwise.
+func (n *NeutrinoNotifier) Started() bool {
+	return atomic.LoadInt32(&n.active) != 0
 }
 
 // filteredBlock represents a new block which has been connected to the main
