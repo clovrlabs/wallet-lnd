@@ -39,6 +39,7 @@ import (
 	"github.com/lightningnetwork/lnd/routing"
 	"github.com/lightningnetwork/lnd/routing/localchans"
 	"github.com/lightningnetwork/lnd/signal"
+	"github.com/lightningnetwork/lnd/submarineswap"
 	"github.com/lightningnetwork/lnd/sweep"
 	"github.com/lightningnetwork/lnd/watchtower"
 	"github.com/lightningnetwork/lnd/watchtower/wtclient"
@@ -136,6 +137,7 @@ func SetupLoggers(root *build.RotatingLogWriter) {
 	AddSubLogger(root, chainreg.Subsystem, chainreg.UseLogger)
 	AddSubLogger(root, chanacceptor.Subsystem, chanacceptor.UseLogger)
 	AddSubLogger(root, funding.Subsystem, funding.UseLogger)
+	AddSubLogger(root, "SUBS", submarineswap.UseLogger)
 }
 
 // AddSubLogger is a helper method to conveniently create and register the
