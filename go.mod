@@ -14,10 +14,8 @@ require (
 	github.com/btcsuite/btcwallet/wallet/txrules v1.0.0
 	github.com/btcsuite/btcwallet/walletdb v1.3.3
 	github.com/btcsuite/btcwallet/wtxmgr v1.2.0
-	github.com/coreos/etcd v3.3.22+incompatible
-	github.com/coreos/go-semver v0.3.0 // indirect
-	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf // indirect
-	github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f // indirect
+	github.com/btcsuite/fastsha256 v0.0.0-20160815193821-637e65642941
+	github.com/coreos/bbolt v1.3.3
 	github.com/davecgh/go-spew v1.1.1
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible // indirect
 	github.com/dustin/go-humanize v1.0.0 // indirect
@@ -84,5 +82,7 @@ replace github.com/lightningnetwork/lnd/cert => ./cert
 replace github.com/lightningnetwork/lnd/clock => ./clock
 
 replace git.schwanenlied.me/yawning/bsaes.git => github.com/Yawning/bsaes v0.0.0-20180720073208-c0276d75487e
+
+replace github.com/btcsuite/btcwallet v0.11.1-0.20200814001439-1d31f4ea6fc5 => github.com/breez/btcwallet v0.11.1-0.20200823142118-f62651ade894
 
 go 1.13
