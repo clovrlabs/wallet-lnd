@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 
 	"github.com/btcsuite/btcd/btcec"
@@ -458,6 +459,7 @@ func GetUtxos(db walletdb.DB, txstore *wtxmgr.Store, net *chaincfg.Params, start
 	var txos []Utxo
 	outPoints := make(map[string]struct{})
 	spentOutPoints := make(map[string]struct{})
+	log.Infof("submarineswap GetUtxos started...")
 	err := walletdb.View(db, func(dbtx walletdb.ReadTx) error {
 		txmgrNs := dbtx.ReadBucket(wtxmgrNamespaceKey)
 		rangeFn := func(details []wtxmgr.TxDetails) (bool, error) {
@@ -474,6 +476,22 @@ func GetUtxos(db walletdb.DB, txstore *wtxmgr.Store, net *chaincfg.Params, start
 					for i, txout := range d.MsgTx.TxOut {
 						_, addrs, _, err := txscript.ExtractPkScriptAddrs(txout.PkScript, net)
 						if err == nil {
+							if len(addrs) == 0 {
+								if len(txout.PkScript) == 0 {
+									log.Errorf("found script with zero addresses and zero length")
+									continue
+								}
+								log.Warnf("found script with zero addresses %v", hex.EncodeToString(txout.PkScript))
+								dis, err := txscript.DisasmString(txout.PkScript)
+								if err != nil {
+									log.Errorf("unable to parse script")
+								} else {
+									log.Infof("parsed script: %v", dis)
+								}
+
+								continue
+							}
+
 							if addrs[0].String() == address {
 								h := d.MsgTx.TxHash()
 								op := wire.NewOutPoint(&h, uint32(i))
