@@ -15,6 +15,7 @@ require (
 	github.com/btcsuite/btcwallet/walletdb v1.3.1
 	github.com/btcsuite/btcwallet/wtxmgr v1.0.0
 	github.com/btcsuite/fastsha256 v0.0.0-20160815193821-637e65642941
+	github.com/coreos/bbolt v1.3.3
 	github.com/davecgh/go-spew v1.1.1
 	github.com/go-errors/errors v1.0.1
 	github.com/go-openapi/strfmt v0.19.5 // indirect
@@ -71,5 +72,7 @@ replace git.schwanenlied.me/yawning/bsaes.git => github.com/Yawning/bsaes v0.0.0
 // Pin this version that we know works explicitly, even though the
 // btcsuite/btcutil package requests a newer version.
 replace golang.org/x/crypto => golang.org/x/crypto v0.0.0-20190211182817-74369b46fc67
+
+replace github.com/btcsuite/btcwallet v0.11.1-0.20200403222202-ada7ca077ebb => github.com/breez/btcwallet v0.11.1-0.20200504162443-8f43df5071c5
 
 go 1.12
