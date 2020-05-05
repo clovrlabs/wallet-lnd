@@ -638,6 +638,10 @@ func Main(lisCfg ListenerCfg, args []string, deps Dependencies) error {
 	}
 	defer rpcServer.Stop()
 
+	if readyChan != nil {
+		readyChan <- struct{}{}
+	}
+
 	// If we're not in regtest or simnet mode, We'll wait until we're fully
 	// synced to continue the start up of the remainder of the daemon. This
 	// ensures that we don't accept any possibly invalid state transitions, or
@@ -705,9 +709,6 @@ func Main(lisCfg ListenerCfg, args []string, deps Dependencies) error {
 		err := fmt.Errorf("Unable to start server: %v", err)
 		ltndLog.Error(err)
 		return err
-	}
-	if readyChan != nil {
-		readyChan <- struct{}{}
 	}
 	defer server.Stop()
 
