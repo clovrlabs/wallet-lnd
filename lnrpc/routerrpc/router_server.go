@@ -86,6 +86,14 @@ var (
 			Entity: "offchain",
 			Action: "read",
 		}},
+		"/routerrpc.Router/ResolveHoldForward": {{
+			Entity: "offchain",
+			Action: "write",
+		}},
+		"/routerrpc.Router/HtlcInterceptor": {{
+			Entity: "offchain",
+			Action: "write",
+		}},
 	}
 
 	// DefaultRouterMacFilename is the default name of the router macaroon
@@ -102,7 +110,8 @@ type Server struct {
 
 	cfg *Config
 
-	quit chan struct{}
+	holdStore *holdForwardsStore
+	quit      chan struct{}
 }
 
 // A compile time check to ensure that Server fully implements the RouterServer
@@ -162,8 +171,9 @@ func New(cfg *Config) (*Server, lnrpc.MacaroonPerms, error) {
 	}
 
 	routerServer := &Server{
-		cfg:  cfg,
-		quit: make(chan struct{}),
+		cfg:       cfg,
+		quit:      make(chan struct{}),
+		holdStore: newHoldForwardsStore(),
 	}
 
 	return routerServer, macPermissions, nil
