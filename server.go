@@ -204,6 +204,8 @@ type server struct {
 
 	htlcSwitch *htlcswitch.Switch
 
+	interceptableSwitch *htlcswitch.InterceptableSwitch
+
 	invoices *invoices.InvoiceRegistry
 
 	channelNotifier *channelnotifier.ChannelNotifier
@@ -497,6 +499,7 @@ func newServer(listenAddrs []net.Addr, chanDB *channeldb.DB,
 	if err != nil {
 		return nil, err
 	}
+	s.interceptableSwitch = htlcswitch.NewInterceptableSwitch(s.htlcSwitch)
 
 	chanStatusMgrCfg := &netann.ChanStatusConfig{
 		ChanStatusSampleInterval: cfg.ChanStatusSampleInterval,
