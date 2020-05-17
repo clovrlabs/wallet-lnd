@@ -947,8 +947,6 @@ func (i *InvoiceRegistry) SettleHodlInvoice(preimage lntypes.Preimage) error {
 		*channeldb.InvoiceUpdateDesc, error) {
 
 		switch invoice.State {
-		case channeldb.ContractOpen:
-			return nil, channeldb.ErrInvoiceStillOpen
 		case channeldb.ContractCanceled:
 			return nil, channeldb.ErrInvoiceAlreadyCanceled
 		case channeldb.ContractSettled:
