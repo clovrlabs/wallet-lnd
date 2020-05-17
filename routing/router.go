@@ -427,12 +427,14 @@ func (r *ChannelRouter) Start() error {
 		return nil
 	}
 
-	log.Tracef("Channel Router starting")
+	log.Errorf("Channel Router starting")
 
 	bestHash, bestHeight, err := r.cfg.Chain.GetBestBlock()
 	if err != nil {
 		return err
 	}
+
+	log.Errorf("Channel Router after GetBestBlock")
 
 	// If the graph has never been pruned, or hasn't fully been created yet,
 	// then we don't treat this as an explicit error.
@@ -455,15 +457,17 @@ func (r *ChannelRouter) Start() error {
 		}
 	}
 
+	log.Errorf("Channel Router after PruneTip")
+
 	// If AssumeChannelValid is present, then we won't rely on pruning
 	// channels from the graph based on their spentness, but whether they
 	// are considered zombies or not.
 	if r.cfg.AssumeChannelValid {
-		log.Infof("Prune zombies started")
+		log.Errorf("Prune zombies started")
 		if err := r.pruneZombieChans(); err != nil {
 			return err
 		}
-		log.Infof("Prune zombies finished")
+		log.Errorf("Prune zombies finished")
 	} else {
 		// Otherwise, we'll use our filtered chain view to prune
 		// channels as soon as they are detected as spent on-chain.
