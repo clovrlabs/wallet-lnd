@@ -15,6 +15,7 @@ import (
 	"github.com/btcsuite/btcutil"
 	"github.com/coreos/bbolt"
 	"github.com/davecgh/go-spew/spew"
+	"github.com/prometheus/common/log"
 
 	"github.com/lightningnetwork/lnd/chainntnfs"
 	"github.com/lightningnetwork/lnd/channeldb"
@@ -159,6 +160,7 @@ func (b *breachArbiter) start() error {
 		return err
 	}
 
+	log.Infof("before b.cfg.DB.FetchClosedChannels")
 	// Load all currently closed channels from disk, we will use the
 	// channels that have been marked fully closed to filter the retribution
 	// information loaded from disk. This is necessary in the event that the
@@ -169,6 +171,7 @@ func (b *breachArbiter) start() error {
 		brarLog.Errorf("Unable to fetch closing channels: %v", err)
 		return err
 	}
+	log.Infof("after b.cfg.DB.FetchClosedChannels")
 
 	// Using the set of non-pending, closed channels, reconcile any
 	// discrepancies between the channeldb and the retribution store by
@@ -195,6 +198,8 @@ func (b *breachArbiter) start() error {
 		}
 	}
 
+	log.Infof("before RegisterConfirmationsNtfn")
+
 	// Spawn the exactRetribution tasks to monitor and resolve any breaches
 	// that were loaded from the retribution store.
 	for chanPoint := range breachRetInfos {
@@ -218,6 +223,7 @@ func (b *breachArbiter) start() error {
 		b.wg.Add(1)
 		go b.exactRetribution(confChan, &retInfo)
 	}
+	log.Infof("after RegisterConfirmationsNtfn")
 
 	// Start watching the remaining active channels!
 	b.wg.Add(1)

@@ -420,15 +420,18 @@ func (d *AuthenticatedGossiper) start() error {
 	}
 	d.bestHeight = height
 
+	log.Infof("before d.reliableSender.Start()")
 	// Start the reliable sender. In case we had any pending messages ready
 	// to be sent when the gossiper was last shut down, we must continue on
 	// our quest to deliver them to their respective peers.
 	if err := d.reliableSender.Start(); err != nil {
 		return err
 	}
+	log.Infof("after d.reliableSender.Start()")
 
 	d.syncMgr.Start()
 
+	log.Infof("after d.syncMgr.Start()")
 	d.wg.Add(1)
 	go d.networkHandler()
 
@@ -436,7 +439,7 @@ func (d *AuthenticatedGossiper) start() error {
 }
 
 // Stop signals any active goroutines for a graceful closure.
-func (d *AuthenticatedGossiper) Stop() error {	
+func (d *AuthenticatedGossiper) Stop() error {
 	d.stopped.Do(d.stop)
 	return nil
 }
@@ -453,7 +456,7 @@ func (d *AuthenticatedGossiper) stop() {
 
 	// We'll stop our reliable sender after all of the gossiper's goroutines
 	// have exited to ensure nothing can cause it to continue executing.
-	d.reliableSender.Stop()	
+	d.reliableSender.Stop()
 }
 
 // TODO(roasbeef): need method to get current gossip timestamp?

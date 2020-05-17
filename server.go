@@ -1351,42 +1351,49 @@ func (s *server) Start() error {
 		}
 		cleanup = cleanup.add(s.chainArb.Stop)
 
+		srvrLog.Infof("s.breachArbiter.Start()")
 		if err := s.breachArbiter.Start(); err != nil {
 			startErr = err
 			return
 		}
 		cleanup = cleanup.add(s.breachArbiter.Stop)
 
+		srvrLog.Infof("s.authGossiper.Start()")
 		if err := s.authGossiper.Start(); err != nil {
 			startErr = err
 			return
 		}
 		cleanup = cleanup.add(s.authGossiper.Stop)
 
+		srvrLog.Infof("s.chanRouter.Start()")
 		if err := s.chanRouter.Start(); err != nil {
 			startErr = err
 			return
 		}
 		cleanup = cleanup.add(s.chanRouter.Stop)
 
+		srvrLog.Infof("s.fundingMgr.Start()")
 		if err := s.fundingMgr.Start(); err != nil {
 			startErr = err
 			return
 		}
 		cleanup = cleanup.add(s.fundingMgr.Stop)
 
+		srvrLog.Infof("s.invoices.Start()")
 		if err := s.invoices.Start(); err != nil {
 			startErr = err
 			return
 		}
 		cleanup = cleanup.add(s.invoices.Stop)
 
+		srvrLog.Infof("s.chanStatusMgr.Start()")
 		if err := s.chanStatusMgr.Start(); err != nil {
 			startErr = err
 			return
 		}
 		cleanup = cleanup.add(s.chanStatusMgr.Stop)
 
+		srvrLog.Infof("s.chanEventStore.Start()")
 		if err := s.chanEventStore.Start(); err != nil {
 			startErr = err
 			return
@@ -1428,6 +1435,7 @@ func (s *server) Start() error {
 			}
 		}
 
+		srvrLog.Infof("s.chanSubSwapper.Start()")
 		if err := s.chanSubSwapper.Start(); err != nil {
 			startErr = err
 			return
@@ -1440,6 +1448,7 @@ func (s *server) Start() error {
 			return nil
 		})
 
+		srvrLog.Infof("s.PruneLinkNodes.Start()")
 		// With all the relevant sub-systems started, we'll now attempt
 		// to establish persistent connections to our direct channel
 		// collaborators within the network. Before doing so however,
@@ -1450,10 +1459,14 @@ func (s *server) Start() error {
 			startErr = err
 			return
 		}
+
+		srvrLog.Infof("s.establishPersistentConnections.Start()")
 		if err := s.establishPersistentConnections(); err != nil {
 			startErr = err
 			return
 		}
+
+		srvrLog.Infof("after s.establishPersistentConnections.Start()")
 
 		// If network bootstrapping hasn't been disabled, then we'll
 		// configure the set of active bootstrappers, and launch a
