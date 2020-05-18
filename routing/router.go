@@ -799,11 +799,13 @@ func (r *ChannelRouter) pruneZombieChans() error {
 			"chans: %v", err)
 	}
 
+	log.Errorf("Prunning after ChanUpdatesInHorizon")
+
 	for _, u := range oldEdges {
 		filterPruneChans(u.Info, u.Policy1, u.Policy2)
 	}
 
-	log.Infof("Pruning %v zombie channels", len(chansToPrune))
+	log.Errorf("Pruning %v zombie channels", len(chansToPrune))
 
 	// With the set of zombie-like channels obtained, we'll do another pass
 	// to delete them from the channel graph.
@@ -816,12 +818,15 @@ func (r *ChannelRouter) pruneZombieChans() error {
 		return fmt.Errorf("unable to delete zombie channels: %v", err)
 	}
 
+	log.Errorf("Prunning before PruneGraphNodes")
 	// With the channels pruned, we'll also attempt to prune any nodes that
 	// were a part of them.
 	err = r.cfg.Graph.PruneGraphNodes()
 	if err != nil && err != channeldb.ErrGraphNodesNotFound {
 		return fmt.Errorf("unable to prune graph nodes: %v", err)
 	}
+
+	log.Errorf("Prunning after PruneGraphNodes")
 
 	return nil
 }
