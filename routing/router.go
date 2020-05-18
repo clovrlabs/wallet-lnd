@@ -799,7 +799,7 @@ func (r *ChannelRouter) pruneZombieChans() error {
 			"chans: %v", err)
 	}
 
-	log.Errorf("Prunning after ChanUpdatesInHorizon")
+	log.Errorf("Prunning after ChanUpdatesInHorizon %v", len(oldEdges))
 
 	for _, u := range oldEdges {
 		filterPruneChans(u.Info, u.Policy1, u.Policy2)
