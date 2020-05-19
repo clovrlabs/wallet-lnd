@@ -780,7 +780,7 @@ func (r *ChannelRouter) pruneZombieChans() error {
 		// the next.
 		isZombie := e1Zombie && e2Zombie
 		if r.cfg.AssumeChannelValid {
-			isZombie := e1Zombie || e2Zombie
+			isZombie = e1Zombie || e2Zombie
 		}
 		if isZombie {
 			return nil
