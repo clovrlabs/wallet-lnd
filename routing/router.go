@@ -778,7 +778,11 @@ func (r *ChannelRouter) pruneZombieChans() error {
 
 		// If the channel is not considered zombie, we can move on to
 		// the next.
-		if !e1Zombie || !e2Zombie {
+		isZombie := e1Zombie && e2Zombie
+		if r.cfg.AssumeChannelValid {
+			isZombie := e1Zombie || e2Zombie
+		}
+		if isZombie {
 			return nil
 		}
 
