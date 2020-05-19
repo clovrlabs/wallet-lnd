@@ -86,12 +86,12 @@
 <time> [ERR] HSWC: ChannelLink(<chan>): unhandled error while forwarding htlc packet over htlcswitch: insufficient bandwidth to route htlc
 <time> [ERR] HSWC: ChannelLink(<chan>): unhandled error while forwarding htlc packet over htlcswitch: node configured to disallow forwards
 <time> [ERR] HSWC: ChannelLink(<chan>): unhandled error while forwarding htlc packet over htlcswitch: UnknownNextPeer
-<time> [ERR] HSWC: ChannelLink(<chan>): Unhandled error while reforwarding htlc settle/fail over htlcswitch: AmountBelowMinimum(amt=<amt>, update=(lnwire.ChannelUpdate) {
-<time> [ERR] HSWC: ChannelLink(<chan>): Unhandled error while reforwarding htlc settle/fail over htlcswitch: circuit has already been closed
-<time> [ERR] HSWC: ChannelLink(<chan>): Unhandled error while reforwarding htlc settle/fail over htlcswitch: FeeInsufficient(htlc_amt==<amt>, update=(lnwire.ChannelUpdate) {
-<time> [ERR] HSWC: ChannelLink(<chan>): Unhandled error while reforwarding htlc settle/fail over htlcswitch: insufficient bandwidth to route htlc
-<time> [ERR] HSWC: ChannelLink(<chan>): Unhandled error while reforwarding htlc settle/fail over htlcswitch: node configured to disallow forwards
-<time> [ERR] HSWC: ChannelLink(<chan>): Unhandled error while reforwarding htlc settle/fail over htlcswitch: UnknownNextPeer
+<time> [ERR] HSWC: Unhandled error while reforwarding htlc settle/fail over htlcswitch: AmountBelowMinimum(amt=<amt>, update=(lnwire.ChannelUpdate) {
+<time> [ERR] HSWC: Unhandled error while reforwarding htlc settle/fail over htlcswitch: circuit has already been closed
+<time> [ERR] HSWC: Unhandled error while reforwarding htlc settle/fail over htlcswitch: FeeInsufficient(htlc_amt==<amt>, update=(lnwire.ChannelUpdate) {
+<time> [ERR] HSWC: Unhandled error while reforwarding htlc settle/fail over htlcswitch: insufficient bandwidth to route htlc
+<time> [ERR] HSWC: Unhandled error while reforwarding htlc settle/fail over htlcswitch: node configured to disallow forwards
+<time> [ERR] HSWC: Unhandled error while reforwarding htlc settle/fail over htlcswitch: UnknownNextPeer
 <time> [ERR] HSWC: FeeInsufficient(htlc_amt==<amt>, update=(lnwire.ChannelUpdate) {
 <time> [ERR] HSWC: insufficient bandwidth to route htlc
 <time> [ERR] HSWC: Link <chan> not found
