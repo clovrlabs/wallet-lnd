@@ -96,6 +96,14 @@ var (
 			Entity: "offchain",
 			Action: "read",
 		}},
+		"/routerrpc.Router/ResolveHoldForward": {{
+			Entity: "offchain",
+			Action: "write",
+		}},
+		"/routerrpc.Router/HtlcInterceptor": {{
+			Entity: "offchain",
+			Action: "write",
+		}},
 	}
 
 	// DefaultRouterMacFilename is the default name of the router macaroon
@@ -111,6 +119,8 @@ type Server struct {
 	shutdown int32 // To be used atomically.
 
 	cfg *Config
+
+	rpcInterceptorActive int32
 
 	quit chan struct{}
 }
