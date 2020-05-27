@@ -706,7 +706,11 @@ func Refund(db *channeldb.DB, net *chaincfg.Params, wallet *lnwallet.LightningWa
 	// Calcluate the weight and the fee
 	weight := 4*refundTx.SerializeSizeStripped() + refundWitnessInputSize*len(refundTx.TxIn)
 	// Adjust the amount in the txout
-	refundTx.TxOut[0].Value = int64(amount - feePerKw.FeeForWeight(int64(weight)))
+	txOutAmount := int64(amount - feePerKw.FeeForWeight(int64(weight)))
+	if txOutAmount <= 0 {
+		return nil, errors.New("fees are to high for the given amount")
+	}
+	refundTx.TxOut[0].Value = txOutAmount
 
 	sigHashes := txscript.NewTxSigHashes(refundTx)
 	privateKey, _ := btcec.PrivKeyFromBytes(btcec.S256(), clientKey)
