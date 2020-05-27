@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
+	"fmt"
 
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcd/chaincfg"
@@ -16,6 +17,7 @@ import (
 	"github.com/btcsuite/btcutil"
 	"github.com/btcsuite/btcwallet/chain"
 	"github.com/btcsuite/btcwallet/waddrmgr"
+	"github.com/btcsuite/btcwallet/wallet/txrules"
 	"github.com/btcsuite/btcwallet/walletdb"
 	"github.com/btcsuite/btcwallet/wtxmgr"
 	"github.com/coreos/bbolt"
@@ -706,11 +708,13 @@ func Refund(db *channeldb.DB, net *chaincfg.Params, wallet *lnwallet.LightningWa
 	// Calcluate the weight and the fee
 	weight := 4*refundTx.SerializeSizeStripped() + refundWitnessInputSize*len(refundTx.TxIn)
 	// Adjust the amount in the txout
-	txOutAmount := int64(amount - feePerKw.FeeForWeight(int64(weight)))
-	if txOutAmount <= 0 {
-		return nil, errors.New("fees are to high for the given amount")
+	refundTx.TxOut[0].Value = int64(amount - feePerKw.FeeForWeight(int64(weight)))
+	err = txrules.CheckOutput(
+		refundTx.TxOut[0], txrules.DefaultRelayFeePerKb,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("fees are to high for the given amount %v", err)
 	}
-	refundTx.TxOut[0].Value = txOutAmount
 
 	sigHashes := txscript.NewTxSigHashes(refundTx)
 	privateKey, _ := btcec.PrivKeyFromBytes(btcec.S256(), clientKey)
