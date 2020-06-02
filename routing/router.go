@@ -459,9 +459,9 @@ func (r *ChannelRouter) Start() error {
 	// channels from the graph based on their spentness, but whether they
 	// are considered zombies or not.
 	if r.cfg.AssumeChannelValid {
-		if err := r.pruneZombieChans(); err != nil {
-			return err
-		}
+		// if err := r.pruneZombieChans(); err != nil {
+		// 	return err
+		// }
 	} else {
 		// Otherwise, we'll use our filtered chain view to prune
 		// channels as soon as they are detected as spent on-chain.
