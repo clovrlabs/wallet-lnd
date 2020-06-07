@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sync/atomic"
 
+	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/lightningnetwork/lnd/breezbackup"
 	"github.com/lightningnetwork/lnd/lnrpc"
 	"google.golang.org/grpc"
@@ -159,6 +160,12 @@ func (s *Server) RegisterWithRootServer(grpcServer *grpc.Server) error {
 
 	log.Debug("BreezBackuper RPC server successfully register with root " +
 		"gRPC server")
+
+	return nil
+}
+
+func (s *Server) RegisterWithRestServer(ctx context.Context,
+	mux *runtime.ServeMux, dest string, opts []grpc.DialOption) error {
 
 	return nil
 }
