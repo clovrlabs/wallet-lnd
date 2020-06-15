@@ -15002,6 +15002,10 @@ var testsCases = []*testCase{
 		name: "send multi path payment",
 		test: testSendMultiPathPayment,
 	},
+	{
+		name: "intercept forwarded htlc packets",
+		test: testForwardInterceptor,
+	},
 }
 
 // TestLightningNetworkDaemon performs a series of integration tests amongst a

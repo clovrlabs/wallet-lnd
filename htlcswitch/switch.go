@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/btcsuite/btcd/wire"
-	"github.com/btcsuite/btclog"
 	"github.com/btcsuite/btcutil"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/lightningnetwork/lnd/chainntnfs"
@@ -550,23 +549,13 @@ func (s *Switch) forward(packet *htlcPacket) error {
 // given to forward them through the router. The sending link's quit channel is
 // used to prevent deadlocks when the switch stops a link in the midst of
 // forwarding.
-//
-// NOTE: This method guarantees that the returned err chan will eventually be
-// closed. The receiver should read on the channel until receiving such a
-// signal.
 func (s *Switch) ForwardPackets(linkQuit chan struct{},
-	packets ...*htlcPacket) chan error {
+	packets ...*htlcPacket) error {
 
 	var (
 		// fwdChan is a buffered channel used to receive err msgs from
 		// the htlcPlex when forwarding this batch.
 		fwdChan = make(chan error, len(packets))
-
-		// errChan is a buffered channel returned to the caller, that is
-		// proxied by the fwdChan. This method guarantees that errChan
-		// will be closed eventually to alert the receiver that it can
-		// stop reading from the channel.
-		errChan = make(chan error, len(packets))
 
 		// numSent keeps a running count of how many packets are
 		// forwarded to the switch, which determines how many responses
@@ -576,8 +565,7 @@ func (s *Switch) ForwardPackets(linkQuit chan struct{},
 
 	// No packets, nothing to do.
 	if len(packets) == 0 {
-		close(errChan)
-		return errChan
+		return nil
 	}
 
 	// Setup a barrier to prevent the background tasks from processing
@@ -592,18 +580,13 @@ func (s *Switch) ForwardPackets(linkQuit chan struct{},
 	// it is already in the process of shutting down.
 	select {
 	case <-linkQuit:
-		close(errChan)
-		return errChan
+		return nil
 	case <-s.quit:
-		close(errChan)
-		return errChan
+		return nil
 	default:
-		// Spawn a goroutine the proxy the errs back to the returned err
-		// chan.  This is done to ensure the err chan returned to the
-		// caller closed properly, alerting the receiver of completion
-		// or shutdown.
+		// Spawn a goroutine to log the errors returned from failed packets.
 		s.wg.Add(1)
-		go s.proxyFwdErrs(&numSent, &wg, fwdChan, errChan)
+		go s.logFwdErrs(&numSent, &wg, fwdChan)
 	}
 
 	// Make a first pass over the packets, forwarding any settles or fails.
@@ -621,7 +604,7 @@ func (s *Switch) ForwardPackets(linkQuit chan struct{},
 		default:
 			err := s.routeAsync(packet, fwdChan, linkQuit)
 			if err != nil {
-				return errChan
+				return fmt.Errorf("failed to forward packet %v", err)
 			}
 			numSent++
 		}
@@ -630,7 +613,7 @@ func (s *Switch) ForwardPackets(linkQuit chan struct{},
 	// If this batch did not contain any circuits to commit, we can return
 	// early.
 	if len(circuits) == 0 {
-		return errChan
+		return nil
 	}
 
 	// Write any circuits that we found to disk.
@@ -666,7 +649,7 @@ func (s *Switch) ForwardPackets(linkQuit chan struct{},
 	for _, packet := range addedPackets {
 		err := s.routeAsync(packet, fwdChan, linkQuit)
 		if err != nil {
-			return errChan
+			return fmt.Errorf("failed to forward packet %v", err)
 		}
 		numSent++
 	}
@@ -695,21 +678,12 @@ func (s *Switch) ForwardPackets(linkQuit chan struct{},
 		}
 	}
 
-	return errChan
+	return nil
 }
 
-// proxyFwdErrs transmits any errors received on `fwdChan` back to `errChan`,
-// and guarantees that the `errChan` will be closed after 1) all errors have
-// been sent, or 2) the switch has received a shutdown. The `errChan` should be
-// buffered with at least the value of `num` after the barrier has been
-// released.
-//
-// NOTE: The receiver of `errChan` should read until the channel closed, since
-// this proxying guarantees that the close will happen.
-func (s *Switch) proxyFwdErrs(num *int, wg *sync.WaitGroup,
-	fwdChan, errChan chan error) {
+// logFwdErrs logs any errors received on `fwdChan`
+func (s *Switch) logFwdErrs(num *int, wg *sync.WaitGroup, fwdChan chan error) {
 	defer s.wg.Done()
-	defer close(errChan)
 
 	// Wait here until the outer function has finished persisting
 	// and routing the packets. This guarantees we don't read from num until
@@ -720,7 +694,10 @@ func (s *Switch) proxyFwdErrs(num *int, wg *sync.WaitGroup,
 	for i := 0; i < numSent; i++ {
 		select {
 		case err := <-fwdChan:
-			errChan <- err
+			if err != nil {
+				log.Errorf("Unhandled error while reforwarding htlc "+
+					"settle/fail over htlcswitch: %v", err)
+			}
 		case <-s.quit:
 			log.Errorf("unable to forward htlc packet " +
 				"htlc switch was stopped")
@@ -1994,28 +1971,10 @@ func (s *Switch) reforwardSettleFails(fwdPkgs []*channeldb.FwdPkg) {
 		// Since this send isn't tied to a specific link, we pass a nil
 		// link quit channel, meaning the send will fail only if the
 		// switch receives a shutdown request.
-		errChan := s.ForwardPackets(nil, switchPackets...)
-		go handleBatchFwdErrs(errChan, log)
-	}
-}
-
-// handleBatchFwdErrs waits on the given errChan until it is closed, logging the
-// errors returned from any unsuccessful forwarding attempts.
-func handleBatchFwdErrs(errChan chan error, l btclog.Logger) {
-	for {
-		err, ok := <-errChan
-		if !ok {
-			// Err chan has been drained or switch is shutting down.
-			// Either way, return.
-			return
+		if err := s.ForwardPackets(nil, switchPackets...); err != nil {
+			log.Errorf("Unhandled error while reforwarding packets "+
+				"settle/fail over htlcswitch: %v", err)
 		}
-
-		if err == nil {
-			continue
-		}
-
-		l.Errorf("Unhandled error while reforwarding htlc "+
-			"settle/fail over htlcswitch: %v", err)
 	}
 }
 
