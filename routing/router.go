@@ -1166,7 +1166,7 @@ func (r *ChannelRouter) processUpdate(msg interface{}) error {
 		// perform any of the expensive checks below, so we'll
 		// short-circuit our path straight to adding the edge to our
 		// graph.
-		if r.cfg.AssumeChannelValid {
+		if r.cfg.AssumeChannelValid || true {
 			if err := r.cfg.Graph.AddChannelEdge(msg); err != nil {
 				return fmt.Errorf("unable to add edge: %v", err)
 			}

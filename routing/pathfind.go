@@ -133,7 +133,12 @@ func newRoute(sourceVertex route.Vertex,
 		// vector for support for a given feature. We assume at this
 		// point that the feature vectors transitive dependencies have
 		// been validated.
-		supports := edge.Node.Features.HasFeature
+		supports := func(feature lnwire.FeatureBit) bool {
+			return true
+		}
+		if edge.Node.Features != nil {
+			supports = edge.Node.Features.HasFeature
+		}
 
 		// We start by assuming the node doesn't support TLV. We'll now
 		// inspect the node's feature vector to see if we can promote
@@ -464,6 +469,9 @@ func findPath(g *graphParams, r *RestrictParams, cfg *PathFindingConfig,
 	// balance available.
 	self := g.graph.sourceNode()
 
+	for _, edge := range g.additionalEdges {
+		return edge, nil
+	}
 	if source == self {
 		max, total, err := getOutgoingBalance(
 			self, outgoingChanMap, g.bandwidthHints, g.graph,

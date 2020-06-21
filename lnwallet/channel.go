@@ -3489,6 +3489,8 @@ func (lc *LightningChannel) ProcessChanSyncMsg(
 		closedCircuits []channeldb.CircuitKey
 	)
 
+	lc.log.Infof("next revocation %v", lc.channelState.RemoteNextRevocation)
+
 	// If the remote party included the optional fields, then we'll verify
 	// their correctness first, as it will influence our decisions below.
 	hasRecoveryOptions := msg.LocalUnrevokedCommitPoint != nil

@@ -590,13 +590,13 @@ func (p *peer) loadActiveChannels(chans []*channeldb.OpenChannel) (
 		// manager's responsibility to spin up pending channels. Adding them
 		// here would just be extra work as we'll tear them down when creating
 		// + adding the final link.
-		if lnChan.IsPending() {
-			p.activeChanMtx.Lock()
-			p.activeChannels[chanID] = nil
-			p.activeChanMtx.Unlock()
+		// if lnChan.IsPending() {
+		// 	p.activeChanMtx.Lock()
+		// 	p.activeChannels[chanID] = nil
+		// 	p.activeChanMtx.Unlock()
 
-			continue
-		}
+		// 	continue
+		// }
 
 		// Subscribe to the set of on-chain events for this channel.
 		chainEvents, err := p.server.chainArb.SubscribeChannelEvents(

@@ -274,6 +274,16 @@ func (r *RouterBackend) QueryRoutes(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
+	selfLightningNode := &channeldb.LightningNode{}
+	routeHintEdges[r.SelfNode] = []*channeldb.ChannelEdgePolicy{
+		{
+			Node:                      selfLightningNode,
+			ChannelID:                 0,
+			FeeBaseMSat:               lnwire.MilliSatoshi(1000),
+			FeeProportionalMillionths: lnwire.MilliSatoshi(0),
+			TimeLockDelta:             40,
+		},
+	}
 
 	// Query the channel router for a possible path to the destination that
 	// can carry `in.Amt` satoshis _including_ the total fee required on
@@ -574,8 +584,15 @@ func (r *RouterBackend) extractIntentFromSendRequest(
 		time.Duration(rpcPayReq.TimeoutSeconds)
 
 	// Route hints.
+	withZeroCof := append(rpcPayReq.RouteHints, &lnrpc.RouteHint{HopHints: []*lnrpc.HopHint{
+		{
+			NodeId:      "02a8e8eb59f56a32746e3bf298abc24102d1a5b8530129ada22f8e21f4f7faf11f",
+			ChanId:      0,
+			FeeBaseMsat: 1000,
+		},
+	}})
 	routeHints, err := unmarshallRouteHints(
-		rpcPayReq.RouteHints,
+		withZeroCof,
 	)
 	if err != nil {
 		return nil, err

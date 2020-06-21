@@ -431,7 +431,7 @@ func (l *channelLink) Start() error {
 		return err
 	}
 
-	l.log.Info("starting")
+	l.log.Infof("starting %v", l.channel.State().RemoteNextRevocation)
 
 	// If the config supplied watchtower client, ensure the channel is
 	// registered before trying to use it during operation.
@@ -457,7 +457,7 @@ func (l *channelLink) Start() error {
 	// is only performed if the link's final short channel ID has been
 	// assigned, otherwise we would try to trim the htlcs belonging to the
 	// all-zero, hop.Source ID.
-	if l.ShortChanID() != hop.Source {
+	if l.ShortChanID() != hop.Source || true {
 		localHtlcIndex, err := l.channel.NextLocalHtlcIndex()
 		if err != nil {
 			return fmt.Errorf("unable to retrieve next local "+
@@ -559,8 +559,9 @@ func (l *channelLink) WaitForShutdown() {
 // initiate new channel state. We also require that the short channel ID not be
 // the all-zero source ID, meaning that the channel has had its ID finalized.
 func (l *channelLink) EligibleToForward() bool {
-	return l.channel.RemoteNextRevocation() != nil &&
-		l.ShortChanID() != hop.Source &&
+	nextRev := l.channel.RemoteNextRevocation()
+	return nextRev != nil &&
+		//l.ShortChanID() != hop.Source &&
 		l.isReestablished()
 }
 
@@ -699,6 +700,7 @@ func (l *channelLink) syncChanStates() error {
 			closedCircuits []CircuitKey
 		)
 
+		l.log.Info("remote revocation %v", l.channel.State().RemoteNextRevocation)
 		// We've just received a ChanSync message from the remote
 		// party, so we'll process the message  in order to determine
 		// if we need to re-transmit any messages to the remote party.
@@ -994,6 +996,7 @@ func (l *channelLink) htlcManager() {
 	// allow the switch to forward HTLCs in the outbound direction.
 	l.markReestablished()
 
+	l.log.Infof("remote revocation %v", l.channel.State().RemoteNextRevocation)
 	// Now that we've received both funding locked and channel reestablish,
 	// we can go ahead and send the active channel notification. We'll also
 	// defer the inactive notification for when the link exits to ensure

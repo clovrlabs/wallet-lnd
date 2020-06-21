@@ -830,6 +830,49 @@ func (f *fundingManager) advanceFundingState(channel *channeldb.OpenChannel,
 	// If the channel is still pending we must wait for the funding
 	// transaction to confirm.
 	if channel.IsPending {
+		// fundingPoint := channel.FundingOutpoint
+		// cp := &lnrpc.ChannelPoint{
+		// 	FundingTxid: &lnrpc.ChannelPoint_FundingTxidBytes{
+		// 		FundingTxidBytes: fundingPoint.Hash[:],
+		// 	},
+		// 	OutputIndex: fundingPoint.Index,
+		// }
+
+		// err := channel.MarkAsOpen(lnwire.ShortChannelID{BlockHeight: 10})
+		// if err != nil {
+		// 	fndgLog.Errorf("error setting channel pending flag to false: "+
+		// 		"%v", err)
+		// 	return
+		// }
+
+		// // Inform the ChannelNotifier that the channel has transitioned from
+		// // pending open to open.
+		//f.cfg.NotifyOpenChannelEvent(channel.FundingOutpoint)
+
+		// // As there might already be an active link in the switch with an
+		// // outdated short chan ID, we'll instruct the switch to load the updated
+		// // short chan id from disk.
+		// err = f.cfg.ReportShortChanID(fundingPoint)
+		// if err != nil {
+		// 	fndgLog.Errorf("unable to report short chan id: %v", err)
+		// }
+
+		// if updateChan != nil {
+		// 	upd := &lnrpc.OpenStatusUpdate{
+		// 		Update: &lnrpc.OpenStatusUpdate_ChanOpen{
+		// 			ChanOpen: &lnrpc.ChannelOpenUpdate{
+		// 				ChannelPoint: cp,
+		// 			},
+		// 		},
+		// 		PendingChanId: pendingChanID[:],
+		// 	}
+
+		// 	select {
+		// 	case updateChan <- upd:
+		// 	case <-f.quit:
+		// 		return
+		// 	}
+		// }
 		err := f.advancePendingChannelState(channel, pendingChanID)
 		if err != nil {
 			fndgLog.Errorf("Unable to advance pending state of "+
