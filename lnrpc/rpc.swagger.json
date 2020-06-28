@@ -4552,6 +4552,9 @@
         }
       }
     },
+    "lnrpcSkipFundingConfirmationResponse": {
+      "type": "object"
+    },
     "lnrpcStopResponse": {
       "type": "object"
     },
