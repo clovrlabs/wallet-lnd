@@ -105,11 +105,11 @@ var (
 // MessageSigner is passed to the Encode method to provide a signature
 // corresponding to the node's pubkey.
 type MessageSigner struct {
-	// SignCompact signs the passed hash with the node's privkey. The
-	// returned signature should be 65 bytes, where the last 64 are the
+	// SignCompact hashes and signs the passed msg with the node's privkey.
+	// The returned signature should be 65 bytes, where the last 64 are the
 	// compact signature, and the first one is a header byte. This is the
 	// format returned by btcec.SignCompact.
-	SignCompact func(hash []byte) ([]byte, error)
+	SignCompact func(msg []byte) ([]byte, error)
 }
 
 // Invoice represents a decoded invoice, or to-be-encoded invoice. Some of the
@@ -487,12 +487,11 @@ func (invoice *Invoice) Encode(signer MessageSigner) (string, error) {
 	}
 
 	toSign := append([]byte(hrp), taggedFieldsBytes...)
-	hash := chainhash.HashB(toSign)
 
 	// We use compact signature format, and also encoded the recovery ID
 	// such that a reader of the invoice can recover our pubkey from the
 	// signature.
-	sign, err := signer.SignCompact(hash)
+	sign, err := signer.SignCompact(toSign)
 	if err != nil {
 		return "", err
 	}
@@ -512,7 +511,7 @@ func (invoice *Invoice) Encode(signer MessageSigner) (string, error) {
 				"signature: %v", err)
 		}
 
-		valid := signature.Verify(hash, invoice.Destination)
+		valid := signature.Verify(chainhash.HashB(toSign), invoice.Destination)
 		if !valid {
 			return "", fmt.Errorf("signature does not match " +
 				"provided pubkey")
