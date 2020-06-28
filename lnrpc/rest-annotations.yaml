@@ -57,6 +57,9 @@ http:
     - selector: lnrpc.Lightning.OpenChannel
       post: "/v1/channels/stream"
       body: "*"
+    - selector: lnrpc.Lightning.SkipFundingConfirmation
+      post: "/v1/funding/skipconfirmation"
+      body: "*"
     - selector: lnrpc.Lightning.FundingStateStep
       post: "/v1/funding/step"
       body: "*"

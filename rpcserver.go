@@ -239,6 +239,13 @@ func mainRPCServerPermissions() map[string][]bakery.Op {
 			Entity: "offchain",
 			Action: "write",
 		}},
+		"/lnrpc.Lightning/SkipFundingConfirmation": {{
+			Entity: "onchain",
+			Action: "write",
+		}, {
+			Entity: "offchain",
+			Action: "write",
+		}},
 		"/lnrpc.Lightning/OpenChannelSync": {{
 			Entity: "onchain",
 			Action: "write",
@@ -6315,6 +6322,32 @@ func (r *rpcServer) BakeMacaroon(ctx context.Context,
 	resp.Macaroon = hex.EncodeToString(newMacBytes)
 
 	return resp, nil
+}
+
+// SkipFundingConfirmation advances the funding workflow by allowing sending
+// funding locked message before the funding transaction is confirmed on-chain
+// and by that allows the channel to be fully operational.
+// This should be used with care because receiving funds on an unconfirmed
+// channel requires the receiver to trust the sender as in case the funding tx
+// won't be confirmed on-chain the sender looses all the funds in his side.
+func (r *rpcServer) SkipFundingConfirmation(ctx context.Context,
+	in *lnrpc.SkipFundingConfirmationRequest) (
+	*lnrpc.SkipFundingConfirmationResponse, error) {
+
+	shortID := lnwire.NewShortChanIDFromInt(in.ChannelId)
+	txid, err := GetChanPointFundingTxid(in.ChanPoint)
+	if err != nil {
+		rpcsLog.Errorf("unable to get funding txid: %v", err)
+		return nil, err
+	}
+	index := in.ChanPoint.OutputIndex
+	chanPoint := wire.NewOutPoint(txid, index)
+
+	err = r.server.fundingMgr.SkipFundingConfirmation(chanPoint, shortID)
+	if err != nil {
+		return nil, err
+	}
+	return &lnrpc.SkipFundingConfirmationResponse{}, nil
 }
 
 // FundingStateStep is an advanced funding related call that allows the caller
