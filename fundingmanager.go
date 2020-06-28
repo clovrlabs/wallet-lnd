@@ -445,6 +445,11 @@ type fundingManager struct {
 	handleFundingLockedMtx      sync.RWMutex
 	handleFundingLockedBarriers map[lnwire.ChannelID]struct{}
 
+	skipFundingConfirmationMtx sync.RWMutex
+	skipFundingConfSignals     map[lnwire.ChannelID]chan lnwire.ShortChannelID
+
+	fakeIDsManager *fakeIDsManager
+
 	quit chan struct{}
 	wg   sync.WaitGroup
 }
@@ -498,6 +503,7 @@ func newFundingManager(cfg fundingConfig) (*fundingManager, error) {
 		fundingRequests:             make(chan *initFundingMsg, msgBufferSize),
 		localDiscoverySignals:       make(map[lnwire.ChannelID]chan struct{}),
 		handleFundingLockedBarriers: make(map[lnwire.ChannelID]struct{}),
+		skipFundingConfSignals:      make(map[lnwire.ChannelID]chan lnwire.ShortChannelID),
 		queries:                     make(chan interface{}, 1),
 		quit:                        make(chan struct{}),
 	}, nil
@@ -526,6 +532,10 @@ func (f *fundingManager) start() error {
 	if err != nil {
 		return err
 	}
+
+	// initialize the helper struct that is responsible for making sure there
+	// aren't any conflict between two different fake ids.
+	f.fakeIDsManager = newFakeIDsManager(allChannels)
 
 	for _, channel := range allChannels {
 		chanID := lnwire.NewChanIDFromOutPoint(&channel.FundingOutpoint)
@@ -713,6 +723,48 @@ func (f *fundingManager) CancelPeerReservations(nodePub [33]byte) {
 
 	// Finally, we'll delete the node itself from the set of reservations.
 	delete(f.activeReservations, nodePub)
+}
+
+// SkipFundingConfirmation skips the part that waits for confirmation in the
+// funding workflow. This is only usefull when the fundee trusts the funder
+// or in case he wants to spend immediately funds that were pushed to him.
+// This flow requires both parties to agree on a fake short channel id that
+// will identify the channel until it confirms on-chain.
+// To distinguish fake ids from real ids we only accept those that their block
+// height is less than 500000.
+func (f *fundingManager) SkipFundingConfirmation(chanPoint *wire.OutPoint,
+	fakeID lnwire.ShortChannelID) error {
+
+	// Make sure the short channel id passed is in our acceptance range.
+	if !isFakeShortChannelID(fakeID) {
+		return fmt.Errorf("invalid short channel id %v", fakeID)
+	}
+
+	// We send a fake confirmation message to advance the funding workflow.
+	f.skipFundingConfirmationMtx.Lock()
+	defer f.skipFundingConfirmationMtx.Unlock()
+
+	channelID := lnwire.NewChanIDFromOutPoint(chanPoint)
+	signal, ok := f.skipFundingConfSignals[channelID]
+	if !ok {
+		return fmt.Errorf("channel is not waiting for confirmation %v", channelID)
+	}
+
+	// make sure this short channel id is not used in other funding workflows.
+	if err := f.fakeIDsManager.hold(fakeID); err != nil {
+		return fmt.Errorf("failed to use short channel id %v: %v", fakeID, err)
+	}
+	signal <- fakeID
+
+	return nil
+}
+
+// isFakeShortChannelID returns true if we accept this short channel id as
+// a temporary fake id for the period the channel is still not confirmed
+// on chain.
+func isFakeShortChannelID(shortID lnwire.ShortChannelID) bool {
+	const maxFakeBlockHeight = 500000
+	return shortID.ToUint64() != 0 && shortID.BlockHeight <= maxFakeBlockHeight
 }
 
 // failFundingFlow will fail the active funding flow with the target peer,
@@ -937,6 +989,20 @@ func (f *fundingManager) stateStep(channel *channeldb.OpenChannel,
 		if err != nil {
 			return fmt.Errorf("failed adding to "+
 				"router graph: %v", err)
+		}
+
+		// in case we skipped confirmation, now that the channel is fully operational
+		// we still want to wait for the first confirmation to update the real short
+		// channel id.
+		if isFakeShortChannelID(*shortChanID) {
+			if shortChanID, err = f.updateShortChannelID(channel); err != nil {
+				return fmt.Errorf("error waiting for "+
+					"funding confirmation: %v", err)
+			}
+			if err = f.addToRouterGraph(channel, shortChanID); err != nil {
+				return fmt.Errorf("failed adding to "+
+					"router graph: %v", err)
+			}
 		}
 
 		// As the channel is now added to the ChannelRouter's topology,
@@ -2109,8 +2175,16 @@ func (f *fundingManager) waitForFundingWithTimeout(
 	timeoutChan := make(chan error, 1)
 	cancelChan := make(chan struct{})
 
+	// We fetch the skipConfirmationSignal so we can poll messages instructing
+	// us to skip funding confirmation.
+	chanID := lnwire.NewChanIDFromOutPoint(&ch.FundingOutpoint)
+	skipConfChan := make(chan lnwire.ShortChannelID)
+	f.skipFundingConfirmationMtx.Lock()
+	f.skipFundingConfSignals[chanID] = skipConfChan
+	f.skipFundingConfirmationMtx.Unlock()
+
 	f.wg.Add(1)
-	go f.waitForFundingConfirmation(ch, cancelChan, confChan)
+	go f.waitForFundingConfirmation(ch, cancelChan, confChan, skipConfChan)
 
 	// If we are not the initiator, we have no money at stake and will
 	// timeout waiting for the funding transaction to confirm after a
@@ -2119,7 +2193,13 @@ func (f *fundingManager) waitForFundingWithTimeout(
 		f.wg.Add(1)
 		go f.waitForTimeout(ch, cancelChan, timeoutChan)
 	}
-	defer close(cancelChan)
+	defer func() {
+		close(cancelChan)
+		f.skipFundingConfirmationMtx.Lock()
+		delete(f.skipFundingConfSignals, chanID)
+		close(skipConfChan)
+		f.skipFundingConfirmationMtx.Unlock()
+	}()
 
 	select {
 	case err := <-timeoutChan:
@@ -2167,7 +2247,7 @@ func makeFundingScript(channel *channeldb.OpenChannel) ([]byte, error) {
 // NOTE: This MUST be run as a goroutine.
 func (f *fundingManager) waitForFundingConfirmation(
 	completeChan *channeldb.OpenChannel, cancelChan <-chan struct{},
-	confChan chan<- *confirmedChannel) {
+	confChan chan<- *confirmedChannel, skipChan chan lnwire.ShortChannelID) {
 
 	defer f.wg.Done()
 	defer close(confChan)
@@ -2199,12 +2279,24 @@ func (f *fundingManager) waitForFundingConfirmation(
 
 	var confDetails *chainntnfs.TxConfirmation
 	var ok bool
+	var shortChanID lnwire.ShortChannelID
+	var tx *wire.MsgTx
 
 	// Wait until the specified number of confirmations has been reached,
 	// we get a cancel signal, or the wallet signals a shutdown.
 	select {
 	case confDetails, ok = <-confNtfn.Confirmed:
-		// fallthrough
+		// With the block height and the transaction index known, we can
+		// construct the compact chanID which is used on the network to unique
+		// identify channels.
+		shortChanID = lnwire.ShortChannelID{
+			BlockHeight: confDetails.BlockHeight,
+			TxIndex:     confDetails.TxIndex,
+			TxPosition:  uint16(completeChan.FundingOutpoint.Index),
+		}
+		tx = confDetails.Tx
+
+	case shortChanID, ok = <-skipChan:
 
 	case <-cancelChan:
 		fndgLog.Warnf("canceled waiting for funding confirmation, "+
@@ -2230,19 +2322,10 @@ func (f *fundingManager) waitForFundingConfirmation(
 	fndgLog.Infof("ChannelPoint(%v) is now active: ChannelID(%v)",
 		fundingPoint, lnwire.NewChanIDFromOutPoint(&fundingPoint))
 
-	// With the block height and the transaction index known, we can
-	// construct the compact chanID which is used on the network to unique
-	// identify channels.
-	shortChanID := lnwire.ShortChannelID{
-		BlockHeight: confDetails.BlockHeight,
-		TxIndex:     confDetails.TxIndex,
-		TxPosition:  uint16(fundingPoint.Index),
-	}
-
 	select {
 	case confChan <- &confirmedChannel{
 		shortChanID: shortChanID,
-		fundingTx:   confDetails.Tx,
+		fundingTx:   tx,
 	}:
 	case <-f.quit:
 		return
@@ -2325,10 +2408,12 @@ func (f *fundingManager) handleFundingConfirmation(
 	// Now that that the channel has been fully confirmed, we'll request
 	// that the wallet fully verify this channel to ensure that it can be
 	// used.
-	err := f.cfg.Wallet.ValidateChannel(completeChan, confChannel.fundingTx)
-	if err != nil {
-		// TODO(roasbeef): delete chan state?
-		return fmt.Errorf("unable to validate channel: %v", err)
+	if !isFakeShortChannelID(confChannel.shortChanID) {
+		err := f.cfg.Wallet.ValidateChannel(completeChan, confChannel.fundingTx)
+		if err != nil {
+			// TODO(roasbeef): delete chan state?
+			return fmt.Errorf("unable to validate channel: %v", err)
+		}
 	}
 
 	// The funding transaction now being confirmed, we add this channel to
@@ -2337,7 +2422,7 @@ func (f *fundingManager) handleFundingConfirmation(
 	// useful to resume the opening process in case of restarts. We set the
 	// opening state before we mark the channel opened in the database,
 	// such that we can receover from one of the db writes failing.
-	err = f.saveChannelOpeningState(
+	err := f.saveChannelOpeningState(
 		&fundingPoint, markedOpen, &confChannel.shortChanID,
 	)
 	if err != nil {
@@ -2520,6 +2605,47 @@ func (f *fundingManager) addToRouterGraph(completeChan *channeldb.OpenChannel,
 	}
 
 	return nil
+}
+
+// Here we wait for confirmation to update the real short channel id for this
+// not yet confirmed channel.
+func (f *fundingManager) updateShortChannelID(ch *channeldb.OpenChannel) (
+	*lnwire.ShortChannelID, error) {
+
+	fndgLog.Infof("waiting for confirmation to update short channel id")
+	confChan := make(chan *confirmedChannel, 1)
+	cancelChan := make(chan struct{})
+	skipChan := make(chan lnwire.ShortChannelID)
+	fakeID := ch.ShortChannelID
+
+	f.wg.Add(1)
+	go f.waitForFundingConfirmation(ch, cancelChan, confChan, skipChan)
+	defer close(skipChan)
+	defer close(cancelChan)
+
+	select {
+	case conf, ok := <-confChan:
+		if !ok {
+			return nil, fmt.Errorf("failed to wait for funding confirmation")
+		}
+		err := f.cfg.Wallet.ValidateChannel(ch, conf.fundingTx)
+		if err != nil {
+			return nil, fmt.Errorf("unable to validate channel: %v", err)
+		}
+		if err := ch.MarkAsOpen(conf.shortChanID); err != nil {
+			return nil, fmt.Errorf("error setting channel pending flag to "+
+				"false: %v", err)
+		}
+		f.fakeIDsManager.release(fakeID)
+		if err := f.cfg.ReportShortChanID(ch.FundingOutpoint); err != nil {
+			fndgLog.Errorf("unable to report short chan id: %v", err)
+		}
+	case <-f.quit:
+		// The fundingManager is shutting down, and will resume wait on
+		// startup.
+		return nil, ErrFundingManagerShuttingDown
+	}
+	return &ch.ShortChannelID, nil
 }
 
 // annAfterSixConfs broadcasts the necessary channel announcement messages to
@@ -3552,4 +3678,44 @@ func (f *fundingManager) deleteChannelOpeningState(chanPoint *wire.OutPoint) err
 
 		return bucket.Delete(outpointBytes.Bytes())
 	})
+}
+
+// fakeIDsManager is responsible to make sure that fake ids as part of skip
+// confirmation requests are safe to use and don't conflict with already
+// existing ids in the system. These fake ids are assigned temporary to pending
+// channels once thee was a request to skip their funding confirmation and
+// should be released once the funding transaction is confirmed.
+type fakeIDsManager struct {
+	sync.Mutex
+	ids map[lnwire.ShortChannelID]struct{}
+}
+
+func newFakeIDsManager(channels []*channeldb.OpenChannel) *fakeIDsManager {
+	ids := make(map[lnwire.ShortChannelID]struct{}, len(channels))
+	for _, c := range channels {
+		if isFakeShortChannelID(c.ShortChannelID) {
+			ids[c.ShortChannelID] = struct{}{}
+		}
+	}
+	return &fakeIDsManager{ids: ids}
+}
+
+// hold attempt to mark this passed short channel id as used.
+// The function returns error in case the id is currently in use.
+func (f *fakeIDsManager) hold(shortChanID lnwire.ShortChannelID) error {
+	f.Lock()
+	defer f.Unlock()
+	if _, ok := f.ids[shortChanID]; ok {
+		return fmt.Errorf("short channel id is used %v", shortChanID)
+	}
+	f.ids[shortChanID] = struct{}{}
+	return nil
+}
+
+// release releases a short channel id that was previousely used and
+// by that allows using it again in the future.
+func (f *fakeIDsManager) release(shortChanID lnwire.ShortChannelID) {
+	f.Lock()
+	defer f.Unlock()
+	delete(f.ids, shortChanID)
 }
