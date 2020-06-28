@@ -5073,6 +5073,9 @@
         }
       }
     },
+    "lnrpcSkipFundingConfirmationResponse": {
+      "type": "object"
+    },
     "lnrpcStopRequest": {
       "type": "object"
     },

@@ -192,6 +192,16 @@ service Lightning {
     rpc OpenChannel (OpenChannelRequest) returns (stream OpenStatusUpdate);
 
     /*
+    SkipFundingConfirmation advances the funding workflow by allowing sending
+    funding locked message before the funding transaction is confirmed on-chain
+    and by that allows the channel to be fully operational.
+    This should be used with care because receiving funds on an unconfirmed channel
+    requires the receiver to trust the sender as in case the funding tx won't be
+    confirmed on-chain the sender looses all the funds in his side.
+    */
+    rpc SkipFundingConfirmation (SkipFundingConfirmationRequest) returns (SkipFundingConfirmationResponse);
+
+    /*
     FundingStateStep is an advanced funding related call that allows the caller
     to either execute some preparatory steps for a funding workflow, or
     manually progress a funding workflow. The primary way a funding flow is
@@ -1734,6 +1744,21 @@ message PendingHTLC {
     // Indicates whether the htlc is in its first or second stage of recovery
     uint32 stage = 6;
 }
+
+message SkipFundingConfirmationRequest {
+    // The target channel point to open
+    ChannelPoint chan_point = 1;
+
+    /*
+    The unique channel ID for the channel. The first 3 bytes are the block
+    height, the next 3 the index within the block, and the last 2 bytes are the
+    output index for the channel.
+    */
+    uint64 channel_id = 2 [jstype = JS_STRING];
+}
+
+message SkipFundingConfirmationResponse {}
+
 
 message PendingChannelsRequest {
 }
