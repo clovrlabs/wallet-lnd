@@ -448,6 +448,8 @@ type fundingManager struct {
 	skipFundingConfirmationMtx sync.RWMutex
 	skipFundingConfSignals     map[lnwire.ChannelID]chan lnwire.ShortChannelID
 
+	fakeIDsManager *fakeIDsManager
+
 	quit chan struct{}
 	wg   sync.WaitGroup
 }
@@ -530,6 +532,10 @@ func (f *fundingManager) start() error {
 	if err != nil {
 		return err
 	}
+
+	// initialize the helper struct that is responsible for making sure there
+	// aren't any conflict between two different fake ids.
+	f.fakeIDsManager = newFakeIDsManager(allChannels)
 
 	for _, channel := range allChannels {
 		chanID := lnwire.NewChanIDFromOutPoint(&channel.FundingOutpoint)
@@ -727,11 +733,11 @@ func (f *fundingManager) CancelPeerReservations(nodePub [33]byte) {
 // To distinguish fake ids from real ids we only accept those that their block
 // height is less than 500000.
 func (f *fundingManager) SkipFundingConfirmation(chanPoint *wire.OutPoint,
-	fakeShortChannelID lnwire.ShortChannelID) error {
+	fakeID lnwire.ShortChannelID) error {
 
 	// Make sure the short channel id passed is in our acceptance range.
-	if !isFakeShortChannelID(fakeShortChannelID) {
-		return fmt.Errorf("invalid short channel id %v", fakeShortChannelID)
+	if !isFakeShortChannelID(fakeID) {
+		return fmt.Errorf("invalid short channel id %v", fakeID)
 	}
 
 	// We send a fake confirmation message to advance the funding workflow.
@@ -743,7 +749,12 @@ func (f *fundingManager) SkipFundingConfirmation(chanPoint *wire.OutPoint,
 	if !ok {
 		return fmt.Errorf("channel is not waiting for confirmation %v", channelID)
 	}
-	signal <- fakeShortChannelID
+
+	// make sure this short channel id is not used in other funding workflows.
+	if err := f.fakeIDsManager.hold(fakeID); err != nil {
+		return fmt.Errorf("failed to use short channel id %v: %v", fakeID, err)
+	}
+	signal <- fakeID
 
 	return nil
 }
@@ -2605,6 +2616,7 @@ func (f *fundingManager) updateShortChannelID(ch *channeldb.OpenChannel) (
 	confChan := make(chan *confirmedChannel, 1)
 	cancelChan := make(chan struct{})
 	skipChan := make(chan lnwire.ShortChannelID)
+	fakeID := ch.ShortChannelID
 
 	f.wg.Add(1)
 	go f.waitForFundingConfirmation(ch, cancelChan, confChan, skipChan)
@@ -2616,8 +2628,14 @@ func (f *fundingManager) updateShortChannelID(ch *channeldb.OpenChannel) (
 		if !ok {
 			return nil, fmt.Errorf("failed to wait for funding confirmation")
 		}
-		ch.MarkAsOpen(conf.shortChanID)
-		f.cfg.ReportShortChanID(ch.FundingOutpoint)
+		if err := ch.MarkAsOpen(conf.shortChanID); err != nil {
+			return nil, fmt.Errorf("error setting channel pending flag to "+
+				"false: %v", err)
+		}
+		f.fakeIDsManager.release(fakeID)
+		if err := f.cfg.ReportShortChanID(ch.FundingOutpoint); err != nil {
+			fndgLog.Errorf("unable to report short chan id: %v", err)
+		}
 	case <-f.quit:
 		// The fundingManager is shutting down, and will resume wait on
 		// startup.
@@ -3656,4 +3674,44 @@ func (f *fundingManager) deleteChannelOpeningState(chanPoint *wire.OutPoint) err
 
 		return bucket.Delete(outpointBytes.Bytes())
 	})
+}
+
+// fakeIDsManager is responsible to make sure that fake ids as part of skip
+// confirmation requests are safe to use and don't conflict with already
+// existing ids in the system. These fake ids are assigned temporary to pending
+// channels once thee was a request to skip their funding confirmation and
+// should be released once the funding transaction is confirmed.
+type fakeIDsManager struct {
+	sync.Mutex
+	ids map[lnwire.ShortChannelID]struct{}
+}
+
+func newFakeIDsManager(channels []*channeldb.OpenChannel) *fakeIDsManager {
+	ids := make(map[lnwire.ShortChannelID]struct{}, len(channels))
+	for _, c := range channels {
+		if isFakeShortChannelID(c.ShortChannelID) {
+			ids[c.ShortChannelID] = struct{}{}
+		}
+	}
+	return &fakeIDsManager{ids: ids}
+}
+
+// hold attempt to mark this passed short channel id as used.
+// The function returns error in case the id is currently in use.
+func (f *fakeIDsManager) hold(shortChanID lnwire.ShortChannelID) error {
+	f.Lock()
+	defer f.Unlock()
+	if _, ok := f.ids[shortChanID]; ok {
+		return fmt.Errorf("short channel id is used %v", shortChanID)
+	}
+	f.ids[shortChanID] = struct{}{}
+	return nil
+}
+
+// release releases a short channel id that was previousely used and
+// by that allows using it again in the future.
+func (f *fakeIDsManager) release(shortChanID lnwire.ShortChannelID) {
+	f.Lock()
+	defer f.Unlock()
+	delete(f.ids, shortChanID)
 }
