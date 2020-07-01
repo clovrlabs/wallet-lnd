@@ -999,6 +999,11 @@ func (f *fundingManager) stateStep(channel *channeldb.OpenChannel,
 				return fmt.Errorf("error waiting for "+
 					"funding confirmation: %v", err)
 			}
+			err = f.cfg.Wallet.Cfg.Database.ChannelGraph().DeleteChannelEdges(
+				shortChanID.ToUint64())
+			if err != nil {
+				fndgLog.Warn("failed to delete fake channel edge from graph")
+			}
 			if err = f.addToRouterGraph(channel, shortChanID); err != nil {
 				return fmt.Errorf("failed adding to "+
 					"router graph: %v", err)
