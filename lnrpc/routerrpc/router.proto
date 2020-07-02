@@ -631,6 +631,8 @@ message ForwardHtlcInterceptRequest {
 
     // Any custom records that were present in the payload.
     map<uint64, bytes> custom_records = 8;
+
+    bytes OnionBlob = 9;
 }
 
 /**
@@ -652,6 +654,10 @@ message ForwardHtlcInterceptResponse {
 
     // The preimage in case the resolve action is Settle.
     bytes preimage = 3;
+
+    uint64 outgoing_amount_msat = 4;
+
+    bytes OnionBlob = 5;
 }
 
 enum ResolveHoldForwardAction {

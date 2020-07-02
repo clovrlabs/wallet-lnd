@@ -128,11 +128,16 @@ func (f *interceptedForward) Packet() InterceptedPacket {
 		IncomingAmount: f.packet.incomingAmount,
 		IncomingExpiry: f.packet.incomingTimeout,
 		CustomRecords:  f.packet.customRecords,
+		OnionBlob:      f.htlc.OnionBlob,
 	}
 }
 
 // Resume resumes the default behavior as if the packet was not intercepted.
-func (f *interceptedForward) Resume() error {
+func (f *interceptedForward) Resume(outgoingAmount lnwire.MilliSatoshi, onionBlob [lnwire.OnionPacketSize]byte) error {
+	f.htlc.OnionBlob = onionBlob
+	f.htlc.Amount = outgoingAmount
+	f.packet.htlc = f.htlc
+	f.packet.amount = outgoingAmount
 	return f.htlcSwitch.ForwardPackets(f.linkQuit, f.packet)
 }
 

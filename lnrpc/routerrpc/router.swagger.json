@@ -944,6 +944,10 @@
             "format": "byte"
           },
           "description": "Any custom records that were present in the payload."
+        },
+        "OnionBlob": {
+          "type": "string",
+          "format": "byte"
         }
       }
     },
