@@ -231,6 +231,8 @@ type InterceptedPacket struct {
 	// CustomRecords are user-defined records in the custom type range that
 	// were included in the payload.
 	CustomRecords record.CustomSet
+
+	OnionBlob [lnwire.OnionPacketSize]byte
 }
 
 // InterceptedForward is passed to the ForwardInterceptor for every forwarded
@@ -245,7 +247,7 @@ type InterceptedForward interface {
 	// Resume notifies the intention to resume an existing hold forward. This
 	// basically means the caller wants to resume with the default behavior for
 	// this htlc which usually means forward it.
-	Resume() error
+	Resume(lnwire.MilliSatoshi, [lnwire.OnionPacketSize]byte) error
 
 	// Settle notifies the intention to settle an existing hold
 	// forward with a given preimage.
