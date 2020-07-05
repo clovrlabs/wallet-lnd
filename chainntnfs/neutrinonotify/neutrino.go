@@ -516,7 +516,7 @@ func (n *NeutrinoNotifier) historicalConfDetails(confRequest chainntnfs.ConfRequ
 
 	// Starting from the height hint, we'll walk forwards in the chain to
 	// see if this transaction/output script has already been confirmed.
-	for scanHeight := endHeight; scanHeight >= startHeight && scanHeight > 0; scanHeight-- {
+	for scanHeight := startHeight; scanHeight <= endHeight; scanHeight++ {
 		// Ensure we haven't been requested to shut down before
 		// processing the next height.
 		select {
