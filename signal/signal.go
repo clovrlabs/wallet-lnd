@@ -6,8 +6,10 @@
 package signal
 
 import (
+	"errors"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 )
 
@@ -24,10 +26,22 @@ var (
 
 	// shutdownChannel is closed once the main interrupt handler exits.
 	shutdownChannel = make(chan struct{})
+
+	running int32
 )
 
 // Intercept starts the interception of interrupt signals.
-func Intercept() {
+func Intercept() error {
+	if !atomic.CompareAndSwapInt32(&running, 0, 1) {
+		return errors.New("Signal already running")
+	}
+
+	// quit is closed when instructing the main interrupt handler to exit.
+	quit = make(chan struct{})
+
+	// shutdownChannel is closed once the main interrupt handler exits.
+	shutdownChannel = make(chan struct{})
+
 	signalsToCatch := []os.Signal{
 		os.Interrupt,
 		os.Kill,
@@ -37,6 +51,8 @@ func Intercept() {
 	}
 	signal.Notify(interruptChannel, signalsToCatch...)
 	go mainInterruptHandler()
+
+	return nil
 }
 
 // mainInterruptHandler listens for SIGINT (Ctrl+C) signals on the
@@ -65,6 +81,7 @@ func mainInterruptHandler() {
 		// Signal the main interrupt handler to exit, and stop accept
 		// post-facto requests.
 		close(quit)
+		atomic.StoreInt32(&running, 0)
 	}
 
 	for {
@@ -87,12 +104,7 @@ func mainInterruptHandler() {
 
 // Alive returns true if the main interrupt handler has not been killed.
 func Alive() bool {
-	select {
-	case <-quit:
-		return false
-	default:
-		return true
-	}
+	return atomic.LoadInt32(&running) == 1
 }
 
 // RequestShutdown initiates a graceful shutdown from the application.
