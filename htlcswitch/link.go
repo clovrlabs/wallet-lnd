@@ -284,6 +284,8 @@ type ChannelLinkConfig struct {
 	// HtlcNotifier is an instance of a htlcNotifier which we will pipe htlc
 	// events through.
 	HtlcNotifier htlcNotifier
+
+	OnCommitmentRevoked func()
 }
 
 // localUpdateAddMsg contains a locally initiated htlc and a channel that will
@@ -1780,6 +1782,7 @@ func (l *channelLink) handleUpstreamMsg(msg lnwire.Message) {
 			l.channel.State().IdentityPub.SerializeCompressed())
 
 		l.cfg.Peer.SendMessage(false, nextRevocation)
+		l.cfg.OnCommitmentRevoked()
 
 		// Since we just revoked our commitment, we may have a new set
 		// of HTLC's on our commitment, so we'll send them over our
@@ -1887,6 +1890,7 @@ func (l *channelLink) handleUpstreamMsg(msg lnwire.Message) {
 			l.channel.State().RemoteCommitment.CommitHeight,
 			l.channel.State().LocalCommitment.CommitHeight,
 			l.channel.State().IdentityPub.SerializeCompressed())
+		l.cfg.OnCommitmentRevoked()
 
 		// The revocation window opened up. If there are pending local
 		// updates, try to update the commit tx. Pending updates could
