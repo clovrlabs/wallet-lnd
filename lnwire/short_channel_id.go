@@ -4,11 +4,6 @@ import (
 	"fmt"
 )
 
-const (
-	// range 0 - 100,000 is left for testing/simnet.
-	fakeIDStartRange = 100000
-)
-
 // ShortChannelID represents the set of data which is needed to retrieve all
 // necessary data to validate the channel existence.
 type ShortChannelID struct {
@@ -40,19 +35,17 @@ func NewShortChanIDFromInt(chanID uint64) ShortChannelID {
 }
 
 // NewFakeShortChanIDFromInt generates a new short channel that its block
-// height is between 2 and 2^18+1 = 262145
-// We want to avoid BlockHeight bellow 2 for testing.
+// height is between 2^17 = 131072 and 2^17 + 2^18 - 1 = 393215
 func NewFakeShortChanIDFromInt(chanID uint64) ShortChannelID {
-	fakeChanID := chanID >> 6
-	c := NewShortChanIDFromInt(fakeChanID)
-	c.BlockHeight += fakeIDStartRange + 1
+	c := NewShortChanIDFromInt(chanID)
+	c.BlockHeight = (c.BlockHeight >> 6) + (1 << 17)
 	return c
 }
 
 // IsFake test if this is a fake channel id. It does it by making sure the
-// block height is between 2 and 2^18+1 = 262145
+// block height is between 2^17 = 131072 and 2^17 + 2^18 - 1 = 393215
 func (c ShortChannelID) IsFake() bool {
-	return c.BlockHeight > fakeIDStartRange && (c.BlockHeight-fakeIDStartRange-1)>>18 == 0
+	return c.BlockHeight >= (1<<17) && c.BlockHeight < (3<<17)
 }
 
 // ToUint64 converts the ShortChannelID into a compact format encoded within a
