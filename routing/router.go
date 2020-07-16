@@ -1166,7 +1166,12 @@ func (r *ChannelRouter) processUpdate(msg interface{}) error {
 		// perform any of the expensive checks below, so we'll
 		// short-circuit our path straight to adding the edge to our
 		// graph.
-		if r.cfg.AssumeChannelValid {
+		// We can also skip fetching the channel point if our node is a side
+		// in this edge and is the creator of this announcement.
+		ourKey := r.selfNode.PubKeyBytes[:]
+		isOurEdge := bytes.Compare(msg.NodeKey1Bytes[:], ourKey) == 0 ||
+			bytes.Compare(msg.NodeKey2Bytes[:], ourKey) == 0
+		if r.cfg.AssumeChannelValid || (isOurEdge && msg.AuthProof == nil) {
 			if err := r.cfg.Graph.AddChannelEdge(msg); err != nil {
 				return fmt.Errorf("unable to add edge: %v", err)
 			}
