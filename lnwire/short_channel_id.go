@@ -46,3 +46,7 @@ func (c ShortChannelID) ToUint64() uint64 {
 func (c ShortChannelID) String() string {
 	return fmt.Sprintf("%d:%d:%d", c.BlockHeight, c.TxIndex, c.TxPosition)
 }
+
+func (c ShortChannelID) IsFake() bool {
+	return c.BlockHeight>>18 == 0
+}
