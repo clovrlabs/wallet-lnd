@@ -732,6 +732,13 @@ func loadConfig() (*config, error) {
 			"litecoin.active must be set to 1 (true)", funcName)
 
 	case cfg.Litecoin.Active:
+		if cfg.Litecoin.SkipChannelConfirmation && cfg.Litecoin.DefaultNumChanConfs != 1 {
+			str := "%s: defaultchanconfs needs to be 1 if skip-channel-confirmation is enabled"
+			err := fmt.Errorf(str, funcName)
+			_, _ = fmt.Fprintln(os.Stderr, err)
+			return nil, err
+		}
+
 		if cfg.Litecoin.TimeLockDelta < minTimeLockDelta {
 			return nil, fmt.Errorf("timelockdelta must be at least %v",
 				minTimeLockDelta)
@@ -819,6 +826,13 @@ func loadConfig() (*config, error) {
 		MaxPaymentMSat = maxLtcPaymentMSat
 
 	case cfg.Bitcoin.Active:
+		if cfg.Bitcoin.SkipChannelConfirmation && cfg.Bitcoin.DefaultNumChanConfs != 1 {
+			str := "%s: defaultchanconfs needs to be 1 if skip-channel-confirmation is enabled"
+			err := fmt.Errorf(str, funcName)
+			_, _ = fmt.Fprintln(os.Stderr, err)
+			return nil, err
+		}
+
 		// Multiple networks can't be selected simultaneously.  Count
 		// number of network flags passed; assign active network params
 		// while we're at it.
