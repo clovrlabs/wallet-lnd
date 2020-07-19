@@ -34,6 +34,19 @@ func NewShortChanIDFromInt(chanID uint64) ShortChannelID {
 	}
 }
 
+// NewFakeShortChanIDFromInt generates a new short channel that its block
+// height is less than 2^18 = 262144
+func NewFakeShortChanIDFromInt(chanID uint64) ShortChannelID {
+	fakeChanID := chanID >> 6
+	return NewShortChanIDFromInt(fakeChanID)
+}
+
+// IsFake test if this is a fake channel id. It does it by making sure the
+// block height is less than 2^18 = 262144
+func (c ShortChannelID) IsFake() bool {
+	return c.BlockHeight>>18 == 0
+}
+
 // ToUint64 converts the ShortChannelID into a compact format encoded within a
 // uint64 (8 bytes).
 func (c ShortChannelID) ToUint64() uint64 {
