@@ -8,7 +8,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -192,7 +191,6 @@ any other dependency that is used outside LND and needs to be shared.
 */
 type Dependencies interface {
 	ReadyChan() chan interface{}
-	LogPipeWriter() *io.PipeWriter
 	ChainService() *neutrino.ChainService
 	ChanDB() *channeldb.DB
 }
