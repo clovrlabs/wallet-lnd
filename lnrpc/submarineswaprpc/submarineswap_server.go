@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 
 	"github.com/btcsuite/btcutil"
+	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/lightningnetwork/lnd/lnrpc"
 	"github.com/lightningnetwork/lnd/lnwallet"
 	"github.com/lightningnetwork/lnd/lnwallet/btcwallet"
@@ -196,6 +197,12 @@ func (s *Server) RegisterWithRootServer(grpcServer *grpc.Server) error {
 
 	log.Debug("SubmarineSwapper RPC server successfully register with root " +
 		"gRPC server")
+
+	return nil
+}
+
+func (s *Server) RegisterWithRestServer(ctx context.Context,
+	mux *runtime.ServeMux, dest string, opts []grpc.DialOption) error {
 
 	return nil
 }
