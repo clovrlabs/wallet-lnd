@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sync/atomic"
 
+	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/lightningnetwork/lnd/lnrpc"
 	"google.golang.org/grpc"
 	"gopkg.in/macaroon-bakery.v2/bakery"
@@ -164,6 +165,12 @@ func (s *Server) RegisterWithRootServer(grpcServer *grpc.Server) error {
 	RegisterBackupServer(grpcServer, s)
 	log.Infof("Backup RPC server successfully register with root " +
 		"gRPC server")
+	return nil
+}
+
+func (s *Server) RegisterWithRestServer(ctx context.Context,
+	mux *runtime.ServeMux, dest string, opts []grpc.DialOption) error {
+
 	return nil
 }
 
