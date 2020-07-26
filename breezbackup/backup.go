@@ -14,6 +14,7 @@ import (
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcwallet/walletdb"
+	"github.com/btcsuite/btcwallet/walletdb/bdb"
 	"github.com/coreos/bbolt"
 	"github.com/lightningnetwork/lnd/channeldb"
 )
@@ -185,7 +186,11 @@ func backupChanneldb(channelDB *channeldb.DB, destfile string) error {
 	}
 
 	// Run compaction.
-	err = compact(dst, channelDB.DB, func(keys [][]byte, k, v []byte) bool {
+	boltdb, err := bdb.UnderlineDB(channelDB.Backend)
+	if err != nil {
+		return err
+	}
+	err = compact(dst, boltdb, func(keys [][]byte, k, v []byte) bool {
 		if len(keys) == 0 && v == nil && graphBuckets[string(k)] != nil {
 			return true
 		}
@@ -200,8 +205,8 @@ func backupChanneldb(channelDB *channeldb.DB, destfile string) error {
 		return fmt.Errorf("channelDB.ChannelGraph().SourceNode(): %w", err)
 	}
 	var ourChannels []*channelInfo
-	err = channelDB.DB.View(func(tx *bbolt.Tx) error {
-		return ourNode.ForEachChannel(tx, func(tx *bbolt.Tx,
+	err = channelDB.View(func(tx walletdb.ReadTx) error {
+		return ourNode.ForEachChannel(tx, func(tx walletdb.ReadTx,
 			channelEdgeInfo *channeldb.ChannelEdgeInfo,
 			_ *channeldb.ChannelEdgePolicy,
 			_ *channeldb.ChannelEdgePolicy) error {
@@ -216,7 +221,7 @@ func backupChanneldb(channelDB *channeldb.DB, destfile string) error {
 		return fmt.Errorf("ourNode.ForEachChannel: %w", err)
 	}
 
-	return copyChanIndex(dst, channelDB.DB, ourChannels)
+	return copyChanIndex(dst, boltdb, ourChannels)
 }
 
 func copyChanIndex(dst, src *bbolt.DB, ourChannels []*channelInfo) error {
