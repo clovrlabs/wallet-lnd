@@ -610,7 +610,7 @@ message ForwardHtlcInterceptRequest {
     // Any custom records that were present in the payload.
     map<uint64, bytes> custom_records = 8;
 
-    bytes OnionBlob = 9;
+    bytes onion_blob = 9;
 }
 
 /**
@@ -635,7 +635,13 @@ message ForwardHtlcInterceptResponse {
 
     uint64 outgoing_amount_msat = 4;
 
-    bytes OnionBlob = 5;
+    // The requested outgoing channel id for this forwarded htlc. Because of
+    // non-strict forwarding, this isn't necessarily the channel over which the
+    // packet will be forwarded eventually. A different channel to the same peer
+    // may be selected as well.
+    uint64 outgoing_requested_chan_id = 5;
+
+    bytes onion_blob = 6;
 }
 
 enum ResolveHoldForwardAction {
