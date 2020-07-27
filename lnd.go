@@ -276,22 +276,24 @@ func Main(cfg *Config, lisCfg ListenerCfg, shutdownChan <-chan struct{}, deps De
 	ltndLog.Infof("Opening the main database, this might take a few " +
 		"minutes...")
 
+	ltndLog.Infof("Opening 2...")
 	startOpenTime := time.Now()
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	chanDbBackend, err := cfg.DB.GetBackend(ctx,
-		cfg.localDatabaseDir(), cfg.networkName(),
-	)
-	if err != nil {
-		ltndLog.Error(err)
-		return err
-	}
-
+	ltndLog.Infof("before chanDB check...")
 	if chanDB == nil {
+		ltndLog.Infof("chanDB is null...")
 		// Open the channeldb, which is dedicated to storing channel, and
 		// network related metadata.
+		chanDbBackend, err := cfg.DB.GetBackend(ctx,
+			cfg.localDatabaseDir(), cfg.networkName(),
+		)
+		if err != nil {
+			ltndLog.Error(err)
+			return err
+		}
 		chanDB, err = channeldb.CreateWithBackend(
 			chanDbBackend,
 			channeldb.OptionSetRejectCacheSize(cfg.Caches.RejectCacheSize),
@@ -309,6 +311,7 @@ func Main(cfg *Config, lisCfg ListenerCfg, shutdownChan <-chan struct{}, deps De
 			return err
 		}
 	}
+	ltndLog.Infof("after Opening 2...")
 
 	openTime := time.Since(startOpenTime)
 	ltndLog.Infof("Database now open (time_to_open=%v)!", openTime)
