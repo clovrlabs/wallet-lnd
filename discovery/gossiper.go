@@ -428,7 +428,7 @@ func (d *AuthenticatedGossiper) start() error {
 }
 
 // Stop signals any active goroutines for a graceful closure.
-func (d *AuthenticatedGossiper) Stop() error {	
+func (d *AuthenticatedGossiper) Stop() error {
 	d.stopped.Do(d.stop)
 	return nil
 }
@@ -445,7 +445,7 @@ func (d *AuthenticatedGossiper) stop() {
 
 	// We'll stop our reliable sender after all of the gossiper's goroutines
 	// have exited to ensure nothing can cause it to continue executing.
-	d.reliableSender.Stop()	
+	d.reliableSender.Stop()
 }
 
 // TODO(roasbeef): need method to get current gossip timestamp?
@@ -1583,7 +1583,7 @@ func (d *AuthenticatedGossiper) processNetworkAnnouncement(
 		// of the chain tip, then we'll put the announcement in limbo
 		// to be fully verified once we advance forward in the chain.
 		d.Lock()
-		if nMsg.isRemote && isPremature(msg.ShortChannelID, 0) {
+		if nMsg.isRemote && !msg.ShortChannelID.IsFake() && isPremature(msg.ShortChannelID, 0) {
 			blockHeight := msg.ShortChannelID.BlockHeight
 			log.Infof("Announcement for chan_id=(%v), is "+
 				"premature: advertises height %v, only "+
@@ -1811,7 +1811,7 @@ func (d *AuthenticatedGossiper) processNetworkAnnouncement(
 		// of the chain tip, then we'll put the announcement in limbo
 		// to be fully verified once we advance forward in the chain.
 		d.Lock()
-		if nMsg.isRemote && isPremature(msg.ShortChannelID, 0) {
+		if nMsg.isRemote && !msg.ShortChannelID.IsFake() && isPremature(msg.ShortChannelID, 0) {
 			log.Infof("Update announcement for "+
 				"short_chan_id(%v), is premature: advertises "+
 				"height %v, only height %v is known",
