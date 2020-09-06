@@ -3631,6 +3631,7 @@ func (f *fundingManager) updateShortChannelID(ch *channeldb.OpenChannel) (
 	*lnwire.ShortChannelID, error) {
 
 	fndgLog.Infof("waiting for confirmation to update short channel id")
+	confirmedChan := ch
 	confChan := make(chan *confirmedChannel, 1)
 	cancelChan := make(chan struct{})
 	skipChan := make(chan lnwire.ShortChannelID)
@@ -3642,18 +3643,23 @@ func (f *fundingManager) updateShortChannelID(ch *channeldb.OpenChannel) (
 
 	select {
 	case conf, ok := <-confChan:
+		var err error
 		if !ok {
 			return nil, fmt.Errorf("failed to wait for funding confirmation")
 		}
-		err := f.cfg.Wallet.ValidateChannel(ch, conf.fundingTx)
+		confirmedChan, err = f.cfg.FindChannel(lnwire.NewChanIDFromOutPoint(&ch.FundingOutpoint))
+		if err != nil {
+			return nil, fmt.Errorf("failed to find channel %v %v", ch.ShortChannelID, err)
+		}
+		err = f.cfg.Wallet.ValidateChannel(confirmedChan, conf.fundingTx)
 		if err != nil {
 			return nil, fmt.Errorf("unable to validate channel: %v", err)
 		}
-		if err := ch.MarkAsOpen(conf.shortChanID); err != nil {
+		if err := confirmedChan.MarkAsOpen(conf.shortChanID); err != nil {
 			return nil, fmt.Errorf("error setting channel pending flag to "+
 				"false: %v", err)
 		}
-		if err := f.cfg.ReportShortChanID(ch.FundingOutpoint); err != nil {
+		if err := f.cfg.ReportShortChanID(confirmedChan.FundingOutpoint); err != nil {
 			fndgLog.Errorf("unable to report short chan id: %v", err)
 		}
 	case <-f.quit:
@@ -3661,7 +3667,7 @@ func (f *fundingManager) updateShortChannelID(ch *channeldb.OpenChannel) (
 		// startup.
 		return nil, ErrFundingManagerShuttingDown
 	}
-	return &ch.ShortChannelID, nil
+	return &confirmedChan.ShortChannelID, nil
 }
 
 type fakeIDsManager struct {
