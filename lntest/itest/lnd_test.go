@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -32,7 +33,6 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/go-errors/errors"
 	"github.com/lightningnetwork/lnd"
-	"github.com/lightningnetwork/lnd/chanbackup"
 	"github.com/lightningnetwork/lnd/channeldb"
 	"github.com/lightningnetwork/lnd/input"
 	"github.com/lightningnetwork/lnd/lncfg"
@@ -50,6 +50,7 @@ import (
 	"github.com/lightningnetwork/lnd/lnwallet/chainfee"
 	"github.com/lightningnetwork/lnd/lnwire"
 	"github.com/lightningnetwork/lnd/routing"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -152,6 +153,39 @@ func assertTxInBlock(t *harnessTest, block *wire.MsgBlock, txid *chainhash.Hash)
 	}
 
 	t.Fatalf("tx was not included in block")
+}
+
+func assertWalletUnspent(t *harnessTest, node *lntest.HarnessNode, out *lnrpc.OutPoint) {
+	t.t.Helper()
+
+	err := wait.NoError(func() error {
+		ctxt, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+		defer cancel()
+		unspent, err := node.ListUnspent(ctxt, &lnrpc.ListUnspentRequest{})
+		if err != nil {
+			return err
+		}
+
+		err = errors.New("tx with wanted txhash never found")
+		for _, utxo := range unspent.Utxos {
+			if !bytes.Equal(utxo.Outpoint.TxidBytes, out.TxidBytes) {
+				continue
+			}
+
+			err = errors.New("wanted output is not a wallet utxo")
+			if utxo.Outpoint.OutputIndex != out.OutputIndex {
+				continue
+			}
+
+			return nil
+		}
+
+		return err
+	}, defaultTimeout)
+	if err != nil {
+		t.Fatalf("outpoint %s not unspent by %s's wallet: %v", out,
+			node.Name(), err)
+	}
 }
 
 func rpcPointToWirePoint(t *harnessTest, chanPoint *lnrpc.ChannelPoint) wire.OutPoint {
@@ -1177,7 +1211,7 @@ func (c commitType) String() string {
 func (c commitType) Args() []string {
 	switch c {
 	case commitTypeLegacy:
-		return []string{"--protocol.committweak"}
+		return []string{"--protocol.legacy.committweak"}
 	case commitTypeTweakless:
 		return []string{}
 	case commitTypeAnchors:
@@ -1456,9 +1490,14 @@ test:
 				// Check that the signalled type matches what we
 				// expect.
 				switch {
-				case expType == commitTypeAnchors && chansCommitType == lnrpc.CommitmentType_ANCHORS:
-				case expType == commitTypeTweakless && chansCommitType == lnrpc.CommitmentType_STATIC_REMOTE_KEY:
-				case expType == commitTypeLegacy && chansCommitType == lnrpc.CommitmentType_LEGACY:
+				case expType == commitTypeAnchors &&
+					chansCommitType == lnrpc.CommitmentType_ANCHORS:
+
+				case expType == commitTypeTweakless &&
+					chansCommitType == lnrpc.CommitmentType_STATIC_REMOTE_KEY:
+
+				case expType == commitTypeLegacy &&
+					chansCommitType == lnrpc.CommitmentType_LEGACY:
 
 				default:
 					t.Fatalf("expected nodes to signal "+
@@ -2423,9 +2462,14 @@ func testOpenChannelAfterReorg(net *lntest.NetworkHarness, t *harnessTest) {
 	)
 
 	// Set up a new miner that we can use to cause a reorg.
-	args := []string{"--rejectnonstd", "--txindex"}
-	tempMiner, err := rpctest.New(harnessNetParams,
-		&rpcclient.NotificationHandlers{}, args)
+	args := []string{
+		"--rejectnonstd",
+		"--txindex",
+		"--nowinservice",
+	}
+	tempMiner, err := rpctest.New(
+		harnessNetParams, &rpcclient.NotificationHandlers{}, args,
+	)
 	if err != nil {
 		t.Fatalf("unable to create mining node: %v", err)
 	}
@@ -3512,6 +3556,13 @@ func channelForceClosureTest(net *lntest.NetworkHarness, t *harnessTest,
 		t.Fatalf("all funds should still be in limbo")
 	}
 
+	// Create a map of outpoints to expected resolutions for alice and carol
+	// which we will add reports to as we sweep outputs.
+	var (
+		aliceReports = make(map[string]*lnrpc.Resolution)
+		carolReports = make(map[string]*lnrpc.Resolution)
+	)
+
 	// The several restarts in this test are intended to ensure that when a
 	// channel is force-closed, the UTXO nursery has persisted the state of
 	// the channel in the closure process and will recover the correct state
@@ -3530,11 +3581,34 @@ func channelForceClosureTest(net *lntest.NetworkHarness, t *harnessTest,
 		expectedTxes = 2
 	}
 
-	_, err = waitForNTxsInMempool(
+	sweepTxns, err := waitForNTxsInMempool(
 		net.Miner.Node, expectedTxes, minerMempoolTimeout,
 	)
 	if err != nil {
 		t.Fatalf("failed to find commitment in miner mempool: %v", err)
+	}
+
+	// Find alice's commit sweep and anchor sweep (if present) in the
+	// mempool.
+	aliceCloseTx := waitingClose.Commitments.LocalTxid
+	_, aliceAnchor := findCommitAndAnchor(
+		t, net, sweepTxns, aliceCloseTx,
+	)
+
+	// If we expect anchors, add alice's anchor to our expected set of
+	// reports.
+	if channelType == commitTypeAnchors {
+		aliceReports[aliceAnchor.OutPoint.String()] = &lnrpc.Resolution{
+			ResolutionType: lnrpc.ResolutionType_ANCHOR,
+			Outcome:        lnrpc.ResolutionOutcome_CLAIMED,
+			SweepTxid:      aliceAnchor.SweepTx,
+			Outpoint: &lnrpc.OutPoint{
+				TxidBytes:   aliceAnchor.OutPoint.Hash[:],
+				TxidStr:     aliceAnchor.OutPoint.Hash.String(),
+				OutputIndex: aliceAnchor.OutPoint.Index,
+			},
+			AmountSat: uint64(anchorSize),
+		}
 	}
 
 	if _, err := net.Miner.Node.Generate(1); err != nil {
@@ -3605,12 +3679,33 @@ func channelForceClosureTest(net *lntest.NetworkHarness, t *harnessTest,
 	// Carol's sweep tx should be in the mempool already, as her output is
 	// not timelocked. If there are anchors, we also expect Carol's anchor
 	// sweep now.
-	_, err = waitForNTxsInMempool(
+	sweepTxns, err = waitForNTxsInMempool(
 		net.Miner.Node, expectedTxes, minerMempoolTimeout,
 	)
 	if err != nil {
 		t.Fatalf("failed to find Carol's sweep in miner mempool: %v",
 			err)
+	}
+
+	// We look up the sweep txns we have found in mempool and create
+	// expected resolutions for carol.
+	carolCommit, carolAnchor := findCommitAndAnchor(
+		t, net, sweepTxns, aliceCloseTx,
+	)
+
+	// If we have anchors, add an anchor resolution for carol.
+	if channelType == commitTypeAnchors {
+		carolReports[carolAnchor.OutPoint.String()] = &lnrpc.Resolution{
+			ResolutionType: lnrpc.ResolutionType_ANCHOR,
+			Outcome:        lnrpc.ResolutionOutcome_CLAIMED,
+			SweepTxid:      carolAnchor.SweepTx,
+			AmountSat:      anchorSize,
+			Outpoint: &lnrpc.OutPoint{
+				TxidBytes:   carolAnchor.OutPoint.Hash[:],
+				TxidStr:     carolAnchor.OutPoint.Hash.String(),
+				OutputIndex: carolAnchor.OutPoint.Index,
+			},
+		}
 	}
 
 	// Currently within the codebase, the default CSV is 4 relative blocks.
@@ -3630,6 +3725,7 @@ func channelForceClosureTest(net *lntest.NetworkHarness, t *harnessTest,
 
 	// Alice should see the channel in her set of pending force closed
 	// channels with her funds still in limbo.
+	var aliceBalance int64
 	err = wait.NoError(func() error {
 		ctxt, _ := context.WithTimeout(ctxb, defaultTimeout)
 		pendingChanResp, err := alice.PendingChannels(
@@ -3651,6 +3747,9 @@ func channelForceClosureTest(net *lntest.NetworkHarness, t *harnessTest,
 		if err != nil {
 			return err
 		}
+
+		// Make a record of the balances we expect for alice and carol.
+		aliceBalance = forceClose.Channel.LocalBalance
 
 		// At this point, the nursery should show that the commitment
 		// output has 2 block left before its CSV delay expires. In
@@ -3710,6 +3809,32 @@ func channelForceClosureTest(net *lntest.NetworkHarness, t *harnessTest,
 				"tx %v, instead spending %v",
 				closingTxID, txIn.PreviousOutPoint)
 		}
+	}
+
+	// We expect a resolution which spends our commit output.
+	output := sweepTx.MsgTx().TxIn[0].PreviousOutPoint
+	aliceReports[output.String()] = &lnrpc.Resolution{
+		ResolutionType: lnrpc.ResolutionType_COMMIT,
+		Outcome:        lnrpc.ResolutionOutcome_CLAIMED,
+		SweepTxid:      sweepingTXID.String(),
+		Outpoint: &lnrpc.OutPoint{
+			TxidBytes:   output.Hash[:],
+			TxidStr:     output.Hash.String(),
+			OutputIndex: output.Index,
+		},
+		AmountSat: uint64(aliceBalance),
+	}
+
+	carolReports[carolCommit.OutPoint.String()] = &lnrpc.Resolution{
+		ResolutionType: lnrpc.ResolutionType_COMMIT,
+		Outcome:        lnrpc.ResolutionOutcome_CLAIMED,
+		Outpoint: &lnrpc.OutPoint{
+			TxidBytes:   carolCommit.OutPoint.Hash[:],
+			TxidStr:     carolCommit.OutPoint.Hash.String(),
+			OutputIndex: carolCommit.OutPoint.Index,
+		},
+		AmountSat: uint64(pushAmt),
+		SweepTxid: carolCommit.SweepTx,
 	}
 
 	// Check that we can find the commitment sweep in our set of known
@@ -3890,6 +4015,7 @@ func channelForceClosureTest(net *lntest.NetworkHarness, t *harnessTest,
 	// the sweeper check for these timeout transactions because they are
 	// not swept by the sweeper; the nursery broadcasts the pre-signed
 	// transaction.
+	var htlcLessFees uint64
 	for _, htlcTxID := range htlcTxIDs {
 		// Fetch the sweep transaction, all input it's spending should
 		// be from the commitment transaction which was broadcast
@@ -3899,18 +4025,62 @@ func channelForceClosureTest(net *lntest.NetworkHarness, t *harnessTest,
 			t.Fatalf("unable to fetch sweep tx: %v", err)
 		}
 		// Ensure the htlc transaction only has one input.
-		if len(htlcTx.MsgTx().TxIn) != 1 {
+		inputs := htlcTx.MsgTx().TxIn
+		if len(inputs) != 1 {
 			t.Fatalf("htlc transaction should only have one txin, "+
 				"has %d", len(htlcTx.MsgTx().TxIn))
 		}
 		// Ensure the htlc transaction is spending from the commitment
 		// transaction.
-		txIn := htlcTx.MsgTx().TxIn[0]
+		txIn := inputs[0]
 		if !closingTxID.IsEqual(&txIn.PreviousOutPoint.Hash) {
 			t.Fatalf("htlc transaction not spending from commit "+
 				"tx %v, instead spending %v",
 				closingTxID, txIn.PreviousOutPoint)
 		}
+
+		outputs := htlcTx.MsgTx().TxOut
+		if len(outputs) != 1 {
+			t.Fatalf("htlc transaction should only have one "+
+				"txout, has: %v", len(outputs))
+		}
+
+		// For each htlc timeout transaction, we expect a resolver
+		// report recording this on chain resolution for both alice and
+		// carol.
+		outpoint := txIn.PreviousOutPoint
+		resolutionOutpoint := &lnrpc.OutPoint{
+			TxidBytes:   outpoint.Hash[:],
+			TxidStr:     outpoint.Hash.String(),
+			OutputIndex: outpoint.Index,
+		}
+
+		// We expect alice to have a timeout tx resolution with an
+		// amount equal to the payment amount.
+		aliceReports[outpoint.String()] = &lnrpc.Resolution{
+			ResolutionType: lnrpc.ResolutionType_OUTGOING_HTLC,
+			Outcome:        lnrpc.ResolutionOutcome_FIRST_STAGE,
+			SweepTxid:      htlcTx.Hash().String(),
+			Outpoint:       resolutionOutpoint,
+			AmountSat:      uint64(paymentAmt),
+		}
+
+		// We expect carol to have a resolution with an incoming htlc
+		// timeout which reflects the full amount of the htlc. It has
+		// no spend tx, because carol stops monitoring the htlc once
+		// it has timed out.
+		carolReports[outpoint.String()] = &lnrpc.Resolution{
+			ResolutionType: lnrpc.ResolutionType_INCOMING_HTLC,
+			Outcome:        lnrpc.ResolutionOutcome_TIMEOUT,
+			SweepTxid:      "",
+			Outpoint:       resolutionOutpoint,
+			AmountSat:      uint64(paymentAmt),
+		}
+
+		// We record the htlc amount less fees here, so that we know
+		// what value to expect for the second stage of our htlc
+		// htlc resolution.
+		htlcLessFees = uint64(outputs[0].Value)
 	}
 
 	// With the htlc timeout txns still in the mempool, we restart Alice to
@@ -4022,6 +4192,12 @@ func channelForceClosureTest(net *lntest.NetworkHarness, t *harnessTest,
 		t.Fatalf("htlc transaction should have %d txin, "+
 			"has %d", numInvoices, len(htlcSweepTx.MsgTx().TxIn))
 	}
+	outputCount := len(htlcSweepTx.MsgTx().TxOut)
+	if outputCount != 1 {
+		t.Fatalf("htlc sweep transaction should have one output, has: "+
+			"%v", outputCount)
+	}
+
 	// Ensure that each output spends from exactly one htlc timeout txn.
 	for _, txIn := range htlcSweepTx.MsgTx().TxIn {
 		outpoint := txIn.PreviousOutPoint.Hash
@@ -4037,6 +4213,21 @@ func channelForceClosureTest(net *lntest.NetworkHarness, t *harnessTest,
 		if htlcTxIDSet[outpoint] > 1 {
 			t.Fatalf("htlc sweep tx has multiple spends from "+
 				"outpoint %v", outpoint)
+		}
+
+		// Since we have now swept our htlc timeout tx, we expect to
+		// have timeout resolutions for each of our htlcs.
+		output := txIn.PreviousOutPoint
+		aliceReports[output.String()] = &lnrpc.Resolution{
+			ResolutionType: lnrpc.ResolutionType_OUTGOING_HTLC,
+			Outcome:        lnrpc.ResolutionOutcome_TIMEOUT,
+			SweepTxid:      htlcSweepTx.Hash().String(),
+			Outpoint: &lnrpc.OutPoint{
+				TxidBytes:   output.Hash[:],
+				TxidStr:     output.Hash.String(),
+				OutputIndex: output.Index,
+			},
+			AmountSat: uint64(htlcLessFees),
 		}
 	}
 
@@ -4149,6 +4340,96 @@ func channelForceClosureTest(net *lntest.NetworkHarness, t *harnessTest,
 		t.Fatalf("carol's balance is incorrect: expected %v got %v",
 			carolExpectedBalance,
 			carolBalResp.ConfirmedBalance)
+	}
+
+	// Finally, we check that alice and carol have the set of resolutions
+	// we expect.
+	assertReports(ctxb, t, alice, op, aliceReports)
+	assertReports(ctxb, t, carol, op, carolReports)
+}
+
+type sweptOutput struct {
+	OutPoint wire.OutPoint
+	SweepTx  string
+}
+
+// findCommitAndAnchor looks for a commitment sweep and anchor sweep in the
+// mempool. Our anchor output is identified by having multiple inputs, because
+// we have to bring another input to add fees to the anchor. Note that the
+// anchor swept output may be nil if the channel did not have anchors.
+func findCommitAndAnchor(t *harnessTest, net *lntest.NetworkHarness,
+	sweepTxns []*chainhash.Hash, closeTx string) (*sweptOutput, *sweptOutput) {
+
+	var commitSweep, anchorSweep *sweptOutput
+
+	for _, tx := range sweepTxns {
+		sweepTx, err := net.Miner.Node.GetRawTransaction(tx)
+		require.NoError(t.t, err)
+
+		// We expect our commitment sweep to have a single input, and,
+		// our anchor sweep to have more inputs (because the wallet
+		// needs to add balance to the anchor amount). We find their
+		// sweep txids here to setup appropriate resolutions. We also
+		// need to find the outpoint for our resolution, which we do by
+		// matching the inputs to the sweep to the close transaction.
+		inputs := sweepTx.MsgTx().TxIn
+		if len(inputs) == 1 {
+			commitSweep = &sweptOutput{
+				OutPoint: inputs[0].PreviousOutPoint,
+				SweepTx:  tx.String(),
+			}
+		} else {
+			// Since we have more than one input, we run through
+			// them to find the outpoint that spends from the close
+			// tx. This will be our anchor output.
+			for _, txin := range inputs {
+				outpointStr := txin.PreviousOutPoint.Hash.String()
+				if outpointStr == closeTx {
+					anchorSweep = &sweptOutput{
+						OutPoint: txin.PreviousOutPoint,
+						SweepTx:  tx.String(),
+					}
+				}
+			}
+		}
+	}
+
+	return commitSweep, anchorSweep
+}
+
+// assertReports checks that the count of resolutions we have present per
+// type matches a set of expected resolutions.
+func assertReports(ctxb context.Context, t *harnessTest,
+	node *lntest.HarnessNode, channelPoint wire.OutPoint,
+	expected map[string]*lnrpc.Resolution) {
+
+	// Get our node's closed channels.
+	ctxt, cancel := context.WithTimeout(ctxb, defaultTimeout)
+	defer cancel()
+
+	closed, err := node.ClosedChannels(
+		ctxt, &lnrpc.ClosedChannelsRequest{},
+	)
+	require.NoError(t.t, err)
+
+	var resolutions []*lnrpc.Resolution
+	for _, close := range closed.Channels {
+		if close.ChannelPoint == channelPoint.String() {
+			resolutions = close.Resolutions
+			break
+		}
+	}
+
+	require.NotNil(t.t, resolutions)
+	require.Equal(t.t, len(expected), len(resolutions))
+
+	for _, res := range resolutions {
+		outPointStr := fmt.Sprintf("%v:%v", res.Outpoint.TxidStr,
+			res.Outpoint.OutputIndex)
+
+		expected, ok := expected[outPointStr]
+		require.True(t.t, ok)
+		require.Equal(t.t, expected, res)
 	}
 }
 
@@ -8812,6 +9093,29 @@ func testRevokedCloseRetributionAltruistWatchtower(net *lntest.NetworkHarness,
 
 	davePreSweepBalance := daveBalResp.ConfirmedBalance
 
+	// Wait until the backup has been accepted by the watchtower before
+	// shutting down Dave.
+	err = wait.NoError(func() error {
+		ctxt, cancel := context.WithTimeout(ctxb, defaultTimeout)
+		defer cancel()
+		bkpStats, err := dave.WatchtowerClient.Stats(ctxt, &wtclientrpc.StatsRequest{})
+		if err != nil {
+			return err
+
+		}
+		if bkpStats == nil {
+			return errors.New("no active backup sessions")
+		}
+		if bkpStats.NumBackups == 0 {
+			return errors.New("no backups accepted")
+		}
+
+		return nil
+	}, defaultTimeout)
+	if err != nil {
+		t.Fatalf("unable to verify backup task completed: %v", err)
+	}
+
 	// Shutdown Dave to simulate going offline for an extended period of
 	// time. Once he's not watching, Carol will try to breach the channel.
 	restart, err := net.SuspendNode(dave)
@@ -8839,9 +9143,6 @@ func testRevokedCloseRetributionAltruistWatchtower(net *lntest.NetworkHarness,
 	if carolChan.NumUpdates != carolStateNumPreCopy {
 		t.Fatalf("db copy failed: %v", carolChan.NumUpdates)
 	}
-
-	// TODO(conner): add hook for backup completion
-	time.Sleep(3 * time.Second)
 
 	// Now force Carol to execute a *force* channel closure by unilaterally
 	// broadcasting his current channel state. This is actually the
@@ -13048,1007 +13349,6 @@ func assertTxLabel(ctx context.Context, t *harnessTest,
 	}
 }
 
-// testChannelBackupUpdates tests that both the streaming channel update RPC,
-// and the on-disk channels.backup are updated each time a channel is
-// opened/closed.
-func testChannelBackupUpdates(net *lntest.NetworkHarness, t *harnessTest) {
-	ctxb := context.Background()
-
-	// First, we'll make a temp directory that we'll use to store our
-	// backup file, so we can check in on it during the test easily.
-	backupDir, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatalf("unable to create backup dir: %v", err)
-	}
-	defer os.RemoveAll(backupDir)
-
-	// First, we'll create a new node, Carol. We'll also create a temporary
-	// file that Carol will use to store her channel backups.
-	backupFilePath := filepath.Join(
-		backupDir, chanbackup.DefaultBackupFileName,
-	)
-	carolArgs := fmt.Sprintf("--backupfilepath=%v", backupFilePath)
-	carol, err := net.NewNode("carol", []string{carolArgs})
-	if err != nil {
-		t.Fatalf("unable to create new node: %v", err)
-	}
-	defer shutdownAndAssert(net, t, carol)
-
-	// Next, we'll register for streaming notifications for changes to the
-	// backup file.
-	backupStream, err := carol.SubscribeChannelBackups(
-		ctxb, &lnrpc.ChannelBackupSubscription{},
-	)
-	if err != nil {
-		t.Fatalf("unable to create backup stream: %v", err)
-	}
-
-	// We'll use this goroutine to proxy any updates to a channel we can
-	// easily use below.
-	var wg sync.WaitGroup
-	backupUpdates := make(chan *lnrpc.ChanBackupSnapshot)
-	streamErr := make(chan error)
-	streamQuit := make(chan struct{})
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for {
-			snapshot, err := backupStream.Recv()
-			if err != nil {
-				select {
-				case streamErr <- err:
-				case <-streamQuit:
-					return
-				}
-			}
-
-			select {
-			case backupUpdates <- snapshot:
-			case <-streamQuit:
-				return
-			}
-		}
-	}()
-	defer close(streamQuit)
-
-	// With Carol up, we'll now connect her to Alice, and open a channel
-	// between them.
-	ctxt, _ := context.WithTimeout(ctxb, defaultTimeout)
-	if err := net.ConnectNodes(ctxt, carol, net.Alice); err != nil {
-		t.Fatalf("unable to connect carol to alice: %v", err)
-	}
-
-	// Next, we'll open two channels between Alice and Carol back to back.
-	var chanPoints []*lnrpc.ChannelPoint
-	numChans := 2
-	chanAmt := btcutil.Amount(1000000)
-	for i := 0; i < numChans; i++ {
-		ctxt, _ := context.WithTimeout(ctxb, defaultTimeout)
-		chanPoint := openChannelAndAssert(
-			ctxt, t, net, net.Alice, carol,
-			lntest.OpenChannelParams{
-				Amt: chanAmt,
-			},
-		)
-
-		chanPoints = append(chanPoints, chanPoint)
-	}
-
-	// Using this helper function, we'll maintain a pointer to the latest
-	// channel backup so we can compare it to the on disk state.
-	var currentBackup *lnrpc.ChanBackupSnapshot
-	assertBackupNtfns := func(numNtfns int) {
-		for i := 0; i < numNtfns; i++ {
-			select {
-			case err := <-streamErr:
-				t.Fatalf("error with backup stream: %v", err)
-
-			case currentBackup = <-backupUpdates:
-
-			case <-time.After(time.Second * 5):
-				t.Fatalf("didn't receive channel backup "+
-					"notification %v", i+1)
-			}
-		}
-	}
-
-	// assertBackupFileState is a helper function that we'll use to compare
-	// the on disk back up file to our currentBackup pointer above.
-	assertBackupFileState := func() {
-		err := wait.NoError(func() error {
-			packedBackup, err := ioutil.ReadFile(backupFilePath)
-			if err != nil {
-				return fmt.Errorf("unable to read backup "+
-					"file: %v", err)
-			}
-
-			// As each back up file will be encrypted with a fresh
-			// nonce, we can't compare them directly, so instead
-			// we'll compare the length which is a proxy for the
-			// number of channels that the multi-backup contains.
-			rawBackup := currentBackup.MultiChanBackup.MultiChanBackup
-			if len(rawBackup) != len(packedBackup) {
-				return fmt.Errorf("backup files don't match: "+
-					"expected %x got %x", rawBackup, packedBackup)
-			}
-
-			// Additionally, we'll assert that both backups up
-			// returned are valid.
-			for i, backup := range [][]byte{rawBackup, packedBackup} {
-				snapshot := &lnrpc.ChanBackupSnapshot{
-					MultiChanBackup: &lnrpc.MultiChanBackup{
-						MultiChanBackup: backup,
-					},
-				}
-				_, err := carol.VerifyChanBackup(ctxb, snapshot)
-				if err != nil {
-					return fmt.Errorf("unable to verify "+
-						"backup #%d: %v", i, err)
-				}
-			}
-
-			return nil
-		}, time.Second*15)
-		if err != nil {
-			t.Fatalf("backup state invalid: %v", err)
-		}
-	}
-
-	// As these two channels were just opened, we should've got two times
-	// the pending and open notifications for channel backups.
-	assertBackupNtfns(2 * 2)
-
-	// The on disk file should also exactly match the latest backup that we
-	// have.
-	assertBackupFileState()
-
-	// Next, we'll close the channels one by one. After each channel
-	// closure, we should get a notification, and the on-disk state should
-	// match this state as well.
-	for i := 0; i < numChans; i++ {
-		// To ensure force closes also trigger an update, we'll force
-		// close half of the channels.
-		forceClose := i%2 == 0
-
-		chanPoint := chanPoints[i]
-
-		ctxt, _ = context.WithTimeout(ctxb, channelCloseTimeout)
-		closeChannelAndAssert(
-			ctxt, t, net, net.Alice, chanPoint, forceClose,
-		)
-
-		// We should get a single notification after closing, and the
-		// on-disk state should match this latest notifications.
-		assertBackupNtfns(1)
-		assertBackupFileState()
-
-		// If we force closed the channel, then we'll mine enough
-		// blocks to ensure all outputs have been swept.
-		if forceClose {
-			cleanupForceClose(t, net, net.Alice, chanPoint)
-		}
-	}
-}
-
-// testExportChannelBackup tests that we're able to properly export either a
-// targeted channel's backup, or export backups of all the currents open
-// channels.
-func testExportChannelBackup(net *lntest.NetworkHarness, t *harnessTest) {
-	ctxb := context.Background()
-
-	// First, we'll create our primary test node: Carol. We'll use Carol to
-	// open channels and also export backups that we'll examine throughout
-	// the test.
-	carol, err := net.NewNode("carol", nil)
-	if err != nil {
-		t.Fatalf("unable to create new node: %v", err)
-	}
-	defer shutdownAndAssert(net, t, carol)
-
-	// With Carol up, we'll now connect her to Alice, and open a channel
-	// between them.
-	ctxt, _ := context.WithTimeout(ctxb, defaultTimeout)
-	if err := net.ConnectNodes(ctxt, carol, net.Alice); err != nil {
-		t.Fatalf("unable to connect carol to alice: %v", err)
-	}
-
-	// Next, we'll open two channels between Alice and Carol back to back.
-	var chanPoints []*lnrpc.ChannelPoint
-	numChans := 2
-	chanAmt := btcutil.Amount(1000000)
-	for i := 0; i < numChans; i++ {
-		ctxt, _ := context.WithTimeout(ctxb, defaultTimeout)
-		chanPoint := openChannelAndAssert(
-			ctxt, t, net, net.Alice, carol,
-			lntest.OpenChannelParams{
-				Amt: chanAmt,
-			},
-		)
-
-		chanPoints = append(chanPoints, chanPoint)
-	}
-
-	// Now that the channels are open, we should be able to fetch the
-	// backups of each of the channels.
-	for _, chanPoint := range chanPoints {
-		ctxt, _ := context.WithTimeout(ctxb, defaultTimeout)
-		req := &lnrpc.ExportChannelBackupRequest{
-			ChanPoint: chanPoint,
-		}
-		chanBackup, err := carol.ExportChannelBackup(ctxt, req)
-		if err != nil {
-			t.Fatalf("unable to fetch backup for channel %v: %v",
-				chanPoint, err)
-		}
-
-		// The returned backup should be full populated. Since it's
-		// encrypted, we can't assert any more than that atm.
-		if len(chanBackup.ChanBackup) == 0 {
-			t.Fatalf("obtained empty backup for channel: %v", chanPoint)
-		}
-
-		// The specified chanPoint in the response should match our
-		// requested chanPoint.
-		if chanBackup.ChanPoint.String() != chanPoint.String() {
-			t.Fatalf("chanPoint mismatched: expected %v, got %v",
-				chanPoint.String(),
-				chanBackup.ChanPoint.String())
-		}
-	}
-
-	// Before we proceed, we'll make two utility methods we'll use below
-	// for our primary assertions.
-	assertNumSingleBackups := func(numSingles int) {
-		err := wait.NoError(func() error {
-			ctxt, _ := context.WithTimeout(ctxb, defaultTimeout)
-			req := &lnrpc.ChanBackupExportRequest{}
-			chanSnapshot, err := carol.ExportAllChannelBackups(
-				ctxt, req,
-			)
-			if err != nil {
-				return fmt.Errorf("unable to export channel "+
-					"backup: %v", err)
-			}
-
-			if chanSnapshot.SingleChanBackups == nil {
-				return fmt.Errorf("single chan backups not " +
-					"populated")
-			}
-
-			backups := chanSnapshot.SingleChanBackups.ChanBackups
-			if len(backups) != numSingles {
-				return fmt.Errorf("expected %v singles, "+
-					"got %v", len(backups), numSingles)
-			}
-
-			return nil
-		}, defaultTimeout)
-		if err != nil {
-			t.Fatalf(err.Error())
-		}
-	}
-	assertMultiBackupFound := func() func(bool, map[wire.OutPoint]struct{}) {
-		ctxt, _ := context.WithTimeout(ctxb, defaultTimeout)
-		req := &lnrpc.ChanBackupExportRequest{}
-		chanSnapshot, err := carol.ExportAllChannelBackups(ctxt, req)
-		if err != nil {
-			t.Fatalf("unable to export channel backup: %v", err)
-		}
-
-		return func(found bool, chanPoints map[wire.OutPoint]struct{}) {
-			switch {
-			case found && chanSnapshot.MultiChanBackup == nil:
-				t.Fatalf("multi-backup not present")
-
-			case !found && chanSnapshot.MultiChanBackup != nil &&
-				(len(chanSnapshot.MultiChanBackup.MultiChanBackup) !=
-					chanbackup.NilMultiSizePacked):
-
-				t.Fatalf("found multi-backup when non should " +
-					"be found")
-			}
-
-			if !found {
-				return
-			}
-
-			backedUpChans := chanSnapshot.MultiChanBackup.ChanPoints
-			if len(chanPoints) != len(backedUpChans) {
-				t.Fatalf("expected %v chans got %v", len(chanPoints),
-					len(backedUpChans))
-			}
-
-			for _, chanPoint := range backedUpChans {
-				wirePoint := rpcPointToWirePoint(t, chanPoint)
-				if _, ok := chanPoints[wirePoint]; !ok {
-					t.Fatalf("unexpected backup: %v", wirePoint)
-				}
-			}
-		}
-	}
-
-	chans := make(map[wire.OutPoint]struct{})
-	for _, chanPoint := range chanPoints {
-		chans[rpcPointToWirePoint(t, chanPoint)] = struct{}{}
-	}
-
-	// We should have exactly two single channel backups contained, and we
-	// should also have a multi-channel backup.
-	assertNumSingleBackups(2)
-	assertMultiBackupFound()(true, chans)
-
-	// We'll now close each channel on by one. After we close a channel, we
-	// shouldn't be able to find that channel as a backup still. We should
-	// also have one less single written to disk.
-	for i, chanPoint := range chanPoints {
-		ctxt, _ = context.WithTimeout(ctxb, channelCloseTimeout)
-		closeChannelAndAssert(
-			ctxt, t, net, net.Alice, chanPoint, false,
-		)
-
-		assertNumSingleBackups(len(chanPoints) - i - 1)
-
-		delete(chans, rpcPointToWirePoint(t, chanPoint))
-		assertMultiBackupFound()(true, chans)
-	}
-
-	// At this point we shouldn't have any single or multi-chan backups at
-	// all.
-	assertNumSingleBackups(0)
-	assertMultiBackupFound()(false, nil)
-}
-
-// nodeRestorer is a function closure that allows each chanRestoreTestCase to
-// control exactly *how* the prior node is restored. This might be using an
-// backup obtained over RPC, or the file system, etc.
-type nodeRestorer func() (*lntest.HarnessNode, error)
-
-// chanRestoreTestCase describes a test case for an end to end SCB restoration
-// work flow. One node will start from scratch using an existing SCB. At the
-// end of the est, both nodes should be made whole via the DLP protocol.
-type chanRestoreTestCase struct {
-	// name is the name of the target test case.
-	name string
-
-	// channelsUpdated is false then this means that no updates
-	// have taken place within the channel before restore.
-	// Otherwise, HTLCs will be settled between the two parties
-	// before restoration modifying the balance beyond the initial
-	// allocation.
-	channelsUpdated bool
-
-	// initiator signals if Dave should be the one that opens the
-	// channel to Alice, or if it should be the other way around.
-	initiator bool
-
-	// private signals if the channel from Dave to Carol should be
-	// private or not.
-	private bool
-
-	// unconfirmed signals if the channel from Dave to Carol should be
-	// confirmed or not.
-	unconfirmed bool
-
-	// anchorCommit is true, then the new anchor commitment type will be
-	// used for the channels created in the test.
-	anchorCommit bool
-
-	// restoreMethod takes an old node, then returns a function
-	// closure that'll return the same node, but with its state
-	// restored via a custom method. We use this to abstract away
-	// _how_ a node is restored from our assertions once the node
-	// has been fully restored itself.
-	restoreMethod func(oldNode *lntest.HarnessNode,
-		backupFilePath string,
-		mnemonic []string) (nodeRestorer, error)
-}
-
-// testChanRestoreScenario executes a chanRestoreTestCase from end to end,
-// ensuring that after Dave restores his channel state according to the
-// testCase, the DLP protocol is executed properly and both nodes are made
-// whole.
-func testChanRestoreScenario(t *harnessTest, net *lntest.NetworkHarness,
-	testCase *chanRestoreTestCase, password []byte) {
-
-	const (
-		chanAmt = btcutil.Amount(10000000)
-		pushAmt = btcutil.Amount(5000000)
-	)
-
-	ctxb := context.Background()
-
-	var nodeArgs []string
-	if testCase.anchorCommit {
-		nodeArgs = commitTypeAnchors.Args()
-	}
-
-	// First, we'll create a brand new node we'll use within the test. If
-	// we have a custom backup file specified, then we'll also create that
-	// for use.
-	dave, mnemonic, err := net.NewNodeWithSeed(
-		"dave", nodeArgs, password,
-	)
-	if err != nil {
-		t.Fatalf("unable to create new node: %v", err)
-	}
-	// Defer to a closure instead of to shutdownAndAssert due to the value
-	// of 'dave' changing throughout the test.
-	defer func() {
-		shutdownAndAssert(net, t, dave)
-	}()
-	carol, err := net.NewNode("carol", nodeArgs)
-	if err != nil {
-		t.Fatalf("unable to make new node: %v", err)
-	}
-	defer shutdownAndAssert(net, t, carol)
-
-	// Now that our new nodes are created, we'll give them some coins for
-	// channel opening and anchor sweeping.
-	ctxt, _ := context.WithTimeout(ctxb, defaultTimeout)
-	err = net.SendCoins(ctxt, btcutil.SatoshiPerBitcoin, carol)
-	if err != nil {
-		t.Fatalf("unable to send coins to dave: %v", err)
-	}
-	ctxt, _ = context.WithTimeout(ctxb, defaultTimeout)
-	err = net.SendCoins(ctxt, btcutil.SatoshiPerBitcoin, dave)
-	if err != nil {
-		t.Fatalf("unable to send coins to dave: %v", err)
-	}
-
-	var from, to *lntest.HarnessNode
-	if testCase.initiator {
-		from, to = dave, carol
-	} else {
-		from, to = carol, dave
-	}
-
-	// Next, we'll connect Dave to Carol, and open a new channel to her
-	// with a portion pushed.
-	if err := net.ConnectNodes(ctxt, dave, carol); err != nil {
-		t.Fatalf("unable to connect dave to carol: %v", err)
-	}
-
-	// We will either open a confirmed or unconfirmed channel, depending on
-	// the requirements of the test case.
-	switch {
-	case testCase.unconfirmed:
-		ctxt, _ = context.WithTimeout(ctxb, channelOpenTimeout)
-		_, err := net.OpenPendingChannel(
-			ctxt, from, to, chanAmt, pushAmt,
-		)
-		if err != nil {
-			t.Fatalf("couldn't open pending channel: %v", err)
-		}
-
-		// Give the pubsub some time to update the channel backup.
-		err = wait.NoError(func() error {
-			fi, err := os.Stat(dave.ChanBackupPath())
-			if err != nil {
-				return err
-			}
-			if fi.Size() <= chanbackup.NilMultiSizePacked {
-				return fmt.Errorf("backup file empty")
-			}
-			return nil
-		}, defaultTimeout)
-		if err != nil {
-			t.Fatalf("channel backup not updated in time: %v", err)
-		}
-
-	default:
-		ctxt, _ = context.WithTimeout(ctxb, channelOpenTimeout)
-		chanPoint := openChannelAndAssert(
-			ctxt, t, net, from, to,
-			lntest.OpenChannelParams{
-				Amt:     chanAmt,
-				PushAmt: pushAmt,
-				Private: testCase.private,
-			},
-		)
-
-		// Wait for both sides to see the opened channel.
-		ctxt, _ = context.WithTimeout(ctxb, defaultTimeout)
-		err = dave.WaitForNetworkChannelOpen(ctxt, chanPoint)
-		if err != nil {
-			t.Fatalf("dave didn't report channel: %v", err)
-		}
-		err = carol.WaitForNetworkChannelOpen(ctxt, chanPoint)
-		if err != nil {
-			t.Fatalf("carol didn't report channel: %v", err)
-		}
-	}
-
-	// If both parties should start with existing channel updates, then
-	// we'll send+settle an HTLC between 'from' and 'to' now.
-	if testCase.channelsUpdated {
-		invoice := &lnrpc.Invoice{
-			Memo:  "testing",
-			Value: 10000,
-		}
-		invoiceResp, err := to.AddInvoice(ctxt, invoice)
-		if err != nil {
-			t.Fatalf("unable to add invoice: %v", err)
-		}
-
-		ctxt, _ := context.WithTimeout(ctxb, defaultTimeout)
-		err = completePaymentRequests(
-			ctxt, from, from.RouterClient,
-			[]string{invoiceResp.PaymentRequest}, true,
-		)
-		if err != nil {
-			t.Fatalf("unable to complete payments: %v", err)
-		}
-	}
-
-	// Before we start the recovery, we'll record the balances of both
-	// Carol and Dave to ensure they both sweep their coins at the end.
-	balReq := &lnrpc.WalletBalanceRequest{}
-	ctxt, _ = context.WithTimeout(ctxb, defaultTimeout)
-	carolBalResp, err := carol.WalletBalance(ctxt, balReq)
-	if err != nil {
-		t.Fatalf("unable to get carol's balance: %v", err)
-	}
-	carolStartingBalance := carolBalResp.ConfirmedBalance
-
-	daveBalance, err := dave.WalletBalance(ctxt, balReq)
-	if err != nil {
-		t.Fatalf("unable to get carol's balance: %v", err)
-	}
-	daveStartingBalance := daveBalance.ConfirmedBalance
-
-	// At this point, we'll now execute the restore method to give us the
-	// new node we should attempt our assertions against.
-	backupFilePath := dave.ChanBackupPath()
-	restoredNodeFunc, err := testCase.restoreMethod(
-		dave, backupFilePath, mnemonic,
-	)
-	if err != nil {
-		t.Fatalf("unable to prep node restoration: %v", err)
-	}
-
-	// TODO(roasbeef): assert recovery state in channel
-
-	// Now that we're able to make our restored now, we'll shutdown the old
-	// Dave node as we'll be storing it shortly below.
-	shutdownAndAssert(net, t, dave)
-
-	// Next, we'll make a new Dave and start the bulk of our recovery
-	// workflow.
-	dave, err = restoredNodeFunc()
-	if err != nil {
-		t.Fatalf("unable to restore node: %v", err)
-	}
-
-	// First ensure that the on-chain balance is restored.
-	err = wait.NoError(func() error {
-		ctxt, _ := context.WithTimeout(ctxb, defaultTimeout)
-		balReq := &lnrpc.WalletBalanceRequest{}
-		daveBalResp, err := dave.WalletBalance(ctxt, balReq)
-		if err != nil {
-			return err
-		}
-
-		daveBal := daveBalResp.ConfirmedBalance
-		if daveBal <= 0 {
-			return fmt.Errorf("expected positive balance, had %v",
-				daveBal)
-		}
-
-		return nil
-	}, defaultTimeout)
-	if err != nil {
-		t.Fatalf("On-chain balance not restored: %v", err)
-	}
-
-	// Now that we have our new node up, we expect that it'll re-connect to
-	// Carol automatically based on the restored backup.
-	ctxt, _ = context.WithTimeout(ctxb, defaultTimeout)
-	err = net.EnsureConnected(ctxt, dave, carol)
-	if err != nil {
-		t.Fatalf("node didn't connect after recovery: %v", err)
-	}
-
-	// TODO(roasbeef): move dave restarts?
-
-	// Now we'll assert that both sides properly execute the DLP protocol.
-	// We grab their balances now to ensure that they're made whole at the
-	// end of the protocol.
-	assertDLPExecuted(
-		net, t, carol, carolStartingBalance, dave, daveStartingBalance,
-		testCase.anchorCommit,
-	)
-}
-
-// chanRestoreViaRPC is a helper test method that returns a nodeRestorer
-// instance which will restore the target node from a password+seed, then
-// trigger a SCB restore using the RPC interface.
-func chanRestoreViaRPC(net *lntest.NetworkHarness,
-	password []byte, mnemonic []string,
-	multi []byte) (nodeRestorer, error) {
-
-	backup := &lnrpc.RestoreChanBackupRequest_MultiChanBackup{
-		MultiChanBackup: multi,
-	}
-
-	ctxb := context.Background()
-
-	return func() (*lntest.HarnessNode, error) {
-		newNode, err := net.RestoreNodeWithSeed(
-			"dave", nil, password, mnemonic, 1000, nil,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("unable to "+
-				"restore node: %v", err)
-		}
-
-		_, err = newNode.RestoreChannelBackups(
-			ctxb, &lnrpc.RestoreChanBackupRequest{
-				Backup: backup,
-			},
-		)
-		if err != nil {
-			return nil, fmt.Errorf("unable "+
-				"to restore backups: %v", err)
-		}
-
-		return newNode, nil
-	}, nil
-}
-
-// testChannelBackupRestore tests that we're able to recover from, and initiate
-// the DLP protocol via: the RPC restore command, restoring on unlock, and
-// restoring from initial wallet creation. We'll also alternate between
-// restoring form the on disk file, and restoring from the exported RPC command
-// as well.
-func testChannelBackupRestore(net *lntest.NetworkHarness, t *harnessTest) {
-	password := []byte("El Psy Kongroo")
-
-	ctxb := context.Background()
-
-	var testCases = []chanRestoreTestCase{
-		// Restore from backups obtained via the RPC interface. Dave
-		// was the initiator, of the non-advertised channel.
-		{
-			name:            "restore from RPC backup",
-			channelsUpdated: false,
-			initiator:       true,
-			private:         false,
-			restoreMethod: func(oldNode *lntest.HarnessNode,
-				backupFilePath string,
-				mnemonic []string) (nodeRestorer, error) {
-
-				// For this restoration method, we'll grab the
-				// current multi-channel backup from the old
-				// node, and use it to restore a new node
-				// within the closure.
-				req := &lnrpc.ChanBackupExportRequest{}
-				chanBackup, err := oldNode.ExportAllChannelBackups(
-					ctxb, req,
-				)
-				if err != nil {
-					return nil, fmt.Errorf("unable to obtain "+
-						"channel backup: %v", err)
-				}
-
-				multi := chanBackup.MultiChanBackup.MultiChanBackup
-
-				// In our nodeRestorer function, we'll restore
-				// the node from seed, then manually recover
-				// the channel backup.
-				return chanRestoreViaRPC(
-					net, password, mnemonic, multi,
-				)
-			},
-		},
-
-		// Restore the backup from the on-disk file, using the RPC
-		// interface.
-		{
-			name:      "restore from backup file",
-			initiator: true,
-			private:   false,
-			restoreMethod: func(oldNode *lntest.HarnessNode,
-				backupFilePath string,
-				mnemonic []string) (nodeRestorer, error) {
-
-				// Read the entire Multi backup stored within
-				// this node's channels.backup file.
-				multi, err := ioutil.ReadFile(backupFilePath)
-				if err != nil {
-					return nil, err
-				}
-
-				// Now that we have Dave's backup file, we'll
-				// create a new nodeRestorer that will restore
-				// using the on-disk channels.backup.
-				return chanRestoreViaRPC(
-					net, password, mnemonic, multi,
-				)
-			},
-		},
-
-		// Restore the backup as part of node initialization with the
-		// prior mnemonic and new backup seed.
-		{
-			name:      "restore during creation",
-			initiator: true,
-			private:   false,
-			restoreMethod: func(oldNode *lntest.HarnessNode,
-				backupFilePath string,
-				mnemonic []string) (nodeRestorer, error) {
-
-				// First, fetch the current backup state as is,
-				// to obtain our latest Multi.
-				chanBackup, err := oldNode.ExportAllChannelBackups(
-					ctxb, &lnrpc.ChanBackupExportRequest{},
-				)
-				if err != nil {
-					return nil, fmt.Errorf("unable to obtain "+
-						"channel backup: %v", err)
-				}
-				backupSnapshot := &lnrpc.ChanBackupSnapshot{
-					MultiChanBackup: chanBackup.MultiChanBackup,
-				}
-
-				// Create a new nodeRestorer that will restore
-				// the node using the Multi backup we just
-				// obtained above.
-				return func() (*lntest.HarnessNode, error) {
-					return net.RestoreNodeWithSeed(
-						"dave", nil, password,
-						mnemonic, 1000, backupSnapshot,
-					)
-				}, nil
-			},
-		},
-
-		// Restore the backup once the node has already been
-		// re-created, using the Unlock call.
-		{
-			name:      "restore during unlock",
-			initiator: true,
-			private:   false,
-			restoreMethod: func(oldNode *lntest.HarnessNode,
-				backupFilePath string,
-				mnemonic []string) (nodeRestorer, error) {
-
-				// First, fetch the current backup state as is,
-				// to obtain our latest Multi.
-				chanBackup, err := oldNode.ExportAllChannelBackups(
-					ctxb, &lnrpc.ChanBackupExportRequest{},
-				)
-				if err != nil {
-					return nil, fmt.Errorf("unable to obtain "+
-						"channel backup: %v", err)
-				}
-				backupSnapshot := &lnrpc.ChanBackupSnapshot{
-					MultiChanBackup: chanBackup.MultiChanBackup,
-				}
-
-				// Create a new nodeRestorer that will restore
-				// the node with its seed, but no channel
-				// backup, shutdown this initialized node, then
-				// restart it again using Unlock.
-				return func() (*lntest.HarnessNode, error) {
-					newNode, err := net.RestoreNodeWithSeed(
-						"dave", nil, password,
-						mnemonic, 1000, nil,
-					)
-					if err != nil {
-						return nil, err
-					}
-
-					err = net.RestartNode(
-						newNode, nil, backupSnapshot,
-					)
-					if err != nil {
-						return nil, err
-					}
-
-					return newNode, nil
-				}, nil
-			},
-		},
-
-		// Restore the backup from the on-disk file a second time to
-		// make sure imports can be canceled and later resumed.
-		{
-			name:      "restore from backup file twice",
-			initiator: true,
-			private:   false,
-			restoreMethod: func(oldNode *lntest.HarnessNode,
-				backupFilePath string,
-				mnemonic []string) (nodeRestorer, error) {
-
-				// Read the entire Multi backup stored within
-				// this node's channels.backup file.
-				multi, err := ioutil.ReadFile(backupFilePath)
-				if err != nil {
-					return nil, err
-				}
-
-				// Now that we have Dave's backup file, we'll
-				// create a new nodeRestorer that will restore
-				// using the on-disk channels.backup.
-				backup := &lnrpc.RestoreChanBackupRequest_MultiChanBackup{
-					MultiChanBackup: multi,
-				}
-
-				ctxb := context.Background()
-
-				return func() (*lntest.HarnessNode, error) {
-					newNode, err := net.RestoreNodeWithSeed(
-						"dave", nil, password, mnemonic,
-						1000, nil,
-					)
-					if err != nil {
-						return nil, fmt.Errorf("unable to "+
-							"restore node: %v", err)
-					}
-
-					_, err = newNode.RestoreChannelBackups(
-						ctxb,
-						&lnrpc.RestoreChanBackupRequest{
-							Backup: backup,
-						},
-					)
-					if err != nil {
-						return nil, fmt.Errorf("unable "+
-							"to restore backups: %v",
-							err)
-					}
-
-					_, err = newNode.RestoreChannelBackups(
-						ctxb,
-						&lnrpc.RestoreChanBackupRequest{
-							Backup: backup,
-						},
-					)
-					if err != nil {
-						return nil, fmt.Errorf("unable "+
-							"to restore backups the"+
-							"second time: %v",
-							err)
-					}
-
-					return newNode, nil
-				}, nil
-			},
-		},
-
-		// Use the channel backup file that contains an unconfirmed
-		// channel and make sure recovery works as well.
-		{
-			name:            "restore unconfirmed channel file",
-			channelsUpdated: false,
-			initiator:       true,
-			private:         false,
-			unconfirmed:     true,
-			restoreMethod: func(oldNode *lntest.HarnessNode,
-				backupFilePath string,
-				mnemonic []string) (nodeRestorer, error) {
-
-				// Read the entire Multi backup stored within
-				// this node's channels.backup file.
-				multi, err := ioutil.ReadFile(backupFilePath)
-				if err != nil {
-					return nil, err
-				}
-
-				// Let's assume time passes, the channel
-				// confirms in the meantime but for some reason
-				// the backup we made while it was still
-				// unconfirmed is the only backup we have. We
-				// should still be able to restore it. To
-				// simulate time passing, we mine some blocks
-				// to get the channel confirmed _after_ we saved
-				// the backup.
-				mineBlocks(t, net, 6, 1)
-
-				// In our nodeRestorer function, we'll restore
-				// the node from seed, then manually recover
-				// the channel backup.
-				return chanRestoreViaRPC(
-					net, password, mnemonic, multi,
-				)
-			},
-		},
-
-		// Create a backup using RPC that contains an unconfirmed
-		// channel and make sure recovery works as well.
-		{
-			name:            "restore unconfirmed channel RPC",
-			channelsUpdated: false,
-			initiator:       true,
-			private:         false,
-			unconfirmed:     true,
-			restoreMethod: func(oldNode *lntest.HarnessNode,
-				backupFilePath string,
-				mnemonic []string) (nodeRestorer, error) {
-
-				// For this restoration method, we'll grab the
-				// current multi-channel backup from the old
-				// node. The channel should be included, even if
-				// it is not confirmed yet.
-				req := &lnrpc.ChanBackupExportRequest{}
-				chanBackup, err := oldNode.ExportAllChannelBackups(
-					ctxb, req,
-				)
-				if err != nil {
-					return nil, fmt.Errorf("unable to obtain "+
-						"channel backup: %v", err)
-				}
-				chanPoints := chanBackup.MultiChanBackup.ChanPoints
-				if len(chanPoints) == 0 {
-					return nil, fmt.Errorf("unconfirmed " +
-						"channel not included in backup")
-				}
-
-				// Let's assume time passes, the channel
-				// confirms in the meantime but for some reason
-				// the backup we made while it was still
-				// unconfirmed is the only backup we have. We
-				// should still be able to restore it. To
-				// simulate time passing, we mine some blocks
-				// to get the channel confirmed _after_ we saved
-				// the backup.
-				mineBlocks(t, net, 6, 1)
-
-				// In our nodeRestorer function, we'll restore
-				// the node from seed, then manually recover
-				// the channel backup.
-				multi := chanBackup.MultiChanBackup.MultiChanBackup
-				return chanRestoreViaRPC(
-					net, password, mnemonic, multi,
-				)
-			},
-		},
-
-		// Restore the backup from the on-disk file, using the RPC
-		// interface, for anchor commitment channels.
-		{
-			name:         "restore from backup file anchors",
-			initiator:    true,
-			private:      false,
-			anchorCommit: true,
-			restoreMethod: func(oldNode *lntest.HarnessNode,
-				backupFilePath string,
-				mnemonic []string) (nodeRestorer, error) {
-
-				// Read the entire Multi backup stored within
-				// this node's channels.backup file.
-				multi, err := ioutil.ReadFile(backupFilePath)
-				if err != nil {
-					return nil, err
-				}
-
-				// Now that we have Dave's backup file, we'll
-				// create a new nodeRestorer that will restore
-				// using the on-disk channels.backup.
-				return chanRestoreViaRPC(
-					net, password, mnemonic, multi,
-				)
-			},
-		},
-	}
-
-	// TODO(roasbeef): online vs offline close?
-
-	// TODO(roasbeef): need to re-trigger the on-disk file once the node
-	// ann is updated?
-
-	for _, testCase := range testCases {
-		success := t.t.Run(testCase.name, func(t *testing.T) {
-			h := newHarnessTest(t, net)
-			testChanRestoreScenario(h, net, &testCase, password)
-		})
-		if !success {
-			break
-		}
-	}
-}
-
 // testHoldInvoicePersistence tests that a sender to a hold-invoice, can be
 // restarted before the payment gets settled, and still be able to receive the
 // preimage.
@@ -14957,6 +14257,10 @@ var testsCases = []*testCase{
 		name: "intercept forwarded htlc packets",
 		test: testForwardInterceptor,
 	},
+	{
+		name: "wumbo channels",
+		test: testWumboChannels,
+	},
 }
 
 // TestLightningNetworkDaemon performs a series of integration tests amongst a
@@ -14984,6 +14288,7 @@ func TestLightningNetworkDaemon(t *testing.T) {
 		"--debuglevel=debug",
 		"--logdir=" + minerLogDir,
 		"--trickleinterval=100ms",
+		"--nowinservice",
 	}
 	handlers := &rpcclient.NotificationHandlers{
 		OnTxAccepted: func(hash *chainhash.Hash, amt btcutil.Amount) {
@@ -15029,11 +14334,24 @@ func TestLightningNetworkDaemon(t *testing.T) {
 		ht.Fatalf("unable to request transaction notifications: %v", err)
 	}
 
+	binary := itestLndBinary
+	if runtime.GOOS == "windows" {
+		// Windows (even in a bash like environment like git bash as on
+		// Travis) doesn't seem to like relative paths to exe files...
+		currentDir, err := os.Getwd()
+		if err != nil {
+			ht.Fatalf("unable to get working directory: %v", err)
+		}
+		targetPath := filepath.Join(currentDir, "../../lnd-itest.exe")
+		binary, err = filepath.Abs(targetPath)
+		if err != nil {
+			ht.Fatalf("unable to get absolute path: %v", err)
+		}
+	}
+
 	// Now we can set up our test harness (LND instance), with the chain
 	// backend we just created.
-	lndHarness, err = lntest.NewNetworkHarness(
-		miner, chainBackend, itestLndBinary,
-	)
+	lndHarness, err = lntest.NewNetworkHarness(miner, chainBackend, binary)
 	if err != nil {
 		ht.Fatalf("unable to create lightning network harness: %v", err)
 	}

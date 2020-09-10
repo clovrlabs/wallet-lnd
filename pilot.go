@@ -96,16 +96,17 @@ func (c *chanController) OpenChannel(target *btcec.PublicKey,
 	// Construct the open channel request and send it to the server to begin
 	// the funding workflow.
 	req := &openChanReq{
-		targetPubkey:    target,
-		chainHash:       *activeNetParams.GenesisHash,
-		subtractFees:    true,
-		localFundingAmt: amt,
-		pushAmt:         0,
-		minHtlcIn:       c.chanMinHtlcIn,
-		fundingFeePerKw: feePerKw,
-		private:         c.private,
-		remoteCsvDelay:  0,
-		minConfs:        c.minConfs,
+		targetPubkey:     target,
+		chainHash:        *activeNetParams.GenesisHash,
+		subtractFees:     true,
+		localFundingAmt:  amt,
+		pushAmt:          0,
+		minHtlcIn:        c.chanMinHtlcIn,
+		fundingFeePerKw:  feePerKw,
+		private:          c.private,
+		remoteCsvDelay:   0,
+		minConfs:         c.minConfs,
+		maxValueInFlight: 0,
 	}
 
 	updateStream, errChan := c.server.OpenChannel(req)
@@ -184,7 +185,7 @@ func initAutoPilot(svr *server, cfg *lncfg.AutoPilot,
 		WalletBalance: func() (btcutil.Amount, error) {
 			return svr.cc.wallet.ConfirmedBalance(cfg.MinConfs)
 		},
-		Graph:       autopilot.ChannelGraphFromDatabase(svr.chanDB.ChannelGraph()),
+		Graph:       autopilot.ChannelGraphFromDatabase(svr.localChanDB.ChannelGraph()),
 		Constraints: atplConstraints,
 		ConnectToPeer: func(target *btcec.PublicKey, addrs []net.Addr) (bool, error) {
 			// First, we'll check if we're already connected to the
@@ -255,7 +256,7 @@ func initAutoPilot(svr *server, cfg *lncfg.AutoPilot,
 			// We'll fetch the current state of open
 			// channels from the database to use as initial
 			// state for the auto-pilot agent.
-			activeChannels, err := svr.chanDB.FetchAllChannels()
+			activeChannels, err := svr.remoteChanDB.FetchAllChannels()
 			if err != nil {
 				return nil, err
 			}

@@ -58,6 +58,7 @@ const (
 	defaultChanStatusSampleInterval      = time.Minute
 	defaultChanEnableTimeout             = 19 * time.Minute
 	defaultChanDisableTimeout            = 20 * time.Minute
+	defaultHeightHintCacheQueryDisable   = false
 	defaultMaxLogFiles                   = 3
 	defaultMaxLogFileSize                = 10
 	defaultMinBackoff                    = time.Second
@@ -72,7 +73,7 @@ const (
 
 	// minTimeLockDelta is the minimum timelock we require for incoming
 	// HTLCs on our channels.
-	minTimeLockDelta = 4
+	minTimeLockDelta = routing.MinCLTVDelta
 
 	// defaultAcceptorTimeout is the time after which an RPCAcceptor will time
 	// out and return false if it hasn't yet received a response.
@@ -80,6 +81,11 @@ const (
 
 	defaultAlias = ""
 	defaultColor = "#3399FF"
+
+	// defaultHostSampleInterval is the default amount of time that the
+	// HostAnnouncer will wait between DNS resolutions to check if the
+	// backing IP of a host has changed.
+	defaultHostSampleInterval = time.Minute * 5
 )
 
 var (
@@ -120,6 +126,8 @@ var (
 	// estimatesmartfee RPC call.
 	defaultBitcoindEstimateMode = "CONSERVATIVE"
 	bitcoindEstimateModes       = [2]string{"ECONOMICAL", defaultBitcoindEstimateMode}
+
+	defaultSphinxDbName = "sphinxreplay.db"
 )
 
 // Config defines the configuration options for lnd.
@@ -158,6 +166,7 @@ type Config struct {
 	RawRESTListeners []string `long:"restlisten" description:"Add an interface/port/socket to listen for REST connections"`
 	RawListeners     []string `long:"listen" description:"Add an interface/port to listen for peer connections"`
 	RawExternalIPs   []string `long:"externalip" description:"Add an ip:port to the list of local addresses we claim to listen on to peers. If a port is not specified, the default (9735) will be used regardless of other parameters"`
+	ExternalHosts    []string `long:"externalhosts" description:"A set of hosts that should be periodically resolved to announce IPs for"`
 	RPCListeners     []net.Addr
 	RESTListeners    []net.Addr
 	RestCORS         []string `long:"restcors" description:"Add an ip:port/hostname to allow cross origin access from. To allow all origins, set as \"*\"."`
@@ -199,17 +208,17 @@ type Config struct {
 
 	NoNetBootstrap bool `long:"nobootstrap" description:"If true, then automatic network bootstrapping will not be attempted."`
 
-	NoSeedBackup bool `long:"noseedbackup" description:"If true, NO SEED WILL BE EXPOSED AND THE WALLET WILL BE ENCRYPTED USING THE DEFAULT PASSPHRASE -- EVER. THIS FLAG IS ONLY FOR TESTING AND IS BEING DEPRECATED."`
+	NoSeedBackup bool `long:"noseedbackup" description:"If true, NO SEED WILL BE EXPOSED -- EVER, AND THE WALLET WILL BE ENCRYPTED USING THE DEFAULT PASSPHRASE. THIS FLAG IS ONLY FOR TESTING AND SHOULD NEVER BE USED ON MAINNET."`
 
 	PaymentsExpirationGracePeriod time.Duration `long:"payments-expiration-grace-period" description:"A period to wait before force closing channels with outgoing htlcs that have timed-out and are a result of this node initiated payments."`
 	TrickleDelay                  int           `long:"trickledelay" description:"Time in milliseconds between each release of announcements to the network"`
 	ChanEnableTimeout             time.Duration `long:"chan-enable-timeout" description:"The duration that a peer connection must be stable before attempting to send a channel update to reenable or cancel a pending disables of the peer's channels on the network."`
 	ChanDisableTimeout            time.Duration `long:"chan-disable-timeout" description:"The duration that must elapse after first detecting that an already active channel is actually inactive and sending channel update disabling it to the network. The pending disable can be canceled if the peer reconnects and becomes stable for chan-enable-timeout before the disable update is sent."`
 	ChanStatusSampleInterval      time.Duration `long:"chan-status-sample-interval" description:"The polling interval between attempts to detect if an active channel has become inactive due to its peer going offline."`
-
-	Alias       string `long:"alias" description:"The node alias. Used as a moniker by peers and intelligence services"`
-	Color       string `long:"color" description:"The color of the node in hex format (i.e. '#3399FF'). Used to customize node appearance in intelligence services"`
-	MinChanSize int64  `long:"minchansize" description:"The smallest channel size (in satoshis) that we should accept. Incoming channels smaller than this will be rejected"`
+	HeightHintCacheQueryDisable   bool          `long:"height-hint-cache-query-disable" description:"Disable queries from the height-hint cache to try to recover channels stuck in the pending close state. Disabling height hint queries may cause longer chain rescans, resulting in a performance hit. Unset this after channels are unstuck so you can get better performance again."`
+	Alias                         string        `long:"alias" description:"The node alias. Used as a moniker by peers and intelligence services"`
+	Color                         string        `long:"color" description:"The color of the node in hex format (i.e. '#3399FF'). Used to customize node appearance in intelligence services"`
+	MinChanSize                   int64         `long:"minchansize" description:"The smallest channel size (in satoshis) that we should accept. Incoming channels smaller than this will be rejected"`
 
 	NumGraphSyncPeers      int           `long:"numgraphsyncpeers" description:"The number of peers that we should receive new graph updates from. This option can be tuned to save bandwidth for light clients or routing nodes."`
 	HistoricalSyncInterval time.Duration `long:"historicalsyncinterval" description:"The polling interval between historical graph sync attempts. Each historical graph sync attempt ensures we reconcile with the remote peer's graph from the genesis block."`
@@ -344,6 +353,7 @@ func DefaultConfig() Config {
 		ChanStatusSampleInterval:      defaultChanStatusSampleInterval,
 		ChanEnableTimeout:             defaultChanEnableTimeout,
 		ChanDisableTimeout:            defaultChanDisableTimeout,
+		HeightHintCacheQueryDisable:   defaultHeightHintCacheQueryDisable,
 		Alias:                         defaultAlias,
 		Color:                         defaultColor,
 		MinChanSize:                   int64(minChanFundingSize),
@@ -661,6 +671,10 @@ func ValidateConfig(cfg Config, usageMessage string) (*Config, error) {
 	if cfg.DisableListen && cfg.NAT {
 		return nil, errors.New("NAT traversal cannot be used when " +
 			"listening is disabled")
+	}
+	if cfg.NAT && len(cfg.ExternalHosts) != 0 {
+		return nil, errors.New("NAT support and externalhosts are " +
+			"mutually exclusive, only one should be selected")
 	}
 
 	// Determine the active chain configuration and its parameters.
@@ -1100,6 +1114,14 @@ func ValidateConfig(cfg Config, usageMessage string) (*Config, error) {
 	if cfg.MinBackoff > cfg.MaxBackoff {
 		return nil, fmt.Errorf("maxbackoff must be greater than " +
 			"minbackoff")
+	}
+
+	// Newer versions of lnd added a new sub-config for bolt-specific
+	// parameters. However we want to also allow existing users to use the
+	// value on the top-level config. If the outer config value is set,
+	// then we'll use that directly.
+	if cfg.SyncFreelist {
+		cfg.DB.Bolt.SyncFreelist = cfg.SyncFreelist
 	}
 
 	// Validate the subconfigs for workers, caches, and the tower client.
