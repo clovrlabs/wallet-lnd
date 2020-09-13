@@ -276,9 +276,10 @@ func Main(cfg *Config, lisCfg ListenerCfg, shutdownChan <-chan struct{}, deps De
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	localChandb := chanDB
+	localChanDB := chanDB
 	remoteChanDB := chanDB
-	cleanup := func() {}
+	var err error
+	cleanUp := func() {}
 	if chanDB == nil {
 		localChanDB, remoteChanDB, cleanUp, err = initializeDatabases(ctx, cfg)
 		switch {
@@ -475,7 +476,7 @@ func Main(cfg *Config, lisCfg ListenerCfg, shutdownChan <-chan struct{}, deps De
 	// When we create the chain control, we need storage for the height
 	// hints and also the wallet itself, for these two we want them to be
 	// replicated, so we'll pass in the remote channel DB instance.
-	activeChainControl, err := newChainControlFromConfig(
+	activeChainControl, cleanup, err := newChainControlFromConfig(
 		cfg, localChanDB, remoteChanDB, privateWalletPw, publicWalletPw,
 		walletInitParams.Birthday, walletInitParams.RecoveryWindow,
 		walletInitParams.Wallet, neutrinoCS,
