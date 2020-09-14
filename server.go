@@ -2978,6 +2978,7 @@ func (s *server) peerConnected(conn net.Conn, connReq *connmgr.ConnReq,
 		ProcessFundingError:   s.fundingMgr.processFundingError,
 		IsPendingChannel:      s.fundingMgr.IsPendingChannel,
 
+		BackupNotifier:          s.backupNotifier,
 		Hodl:                    s.cfg.Hodl,
 		UnsafeReplay:            s.cfg.UnsafeReplay,
 		MaxOutgoingCltvExpiry:   s.cfg.MaxOutgoingCltvExpiry,

@@ -7,6 +7,7 @@ import (
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcd/connmgr"
 
+	"github.com/lightningnetwork/lnd/backupnotifier"
 	"github.com/lightningnetwork/lnd/chainntnfs"
 	"github.com/lightningnetwork/lnd/channeldb"
 	"github.com/lightningnetwork/lnd/channelnotifier"
@@ -198,6 +199,8 @@ type Config struct {
 	// ProcessFundingError is used to hand off an Error message to the funding
 	// manager.
 	ProcessFundingError func(*lnwire.Error, *btcec.PublicKey)
+
+	BackupNotifier *backupnotifier.BackupNotifier
 
 	// IsPendingChannel is used to determine whether to send an Error message
 	// to the funding manager or not.
