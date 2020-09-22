@@ -396,9 +396,9 @@ func (r *ChannelReservation) CommitConstraints(c *channeldb.ChannelConstraints) 
 
 	// The channel reserve should always be greater or equal to the dust
 	// limit. The reservation request should be denied if otherwise.
-	if c.DustLimit > c.ChanReserve {
-		return ErrChanReserveTooSmall(c.ChanReserve, c.DustLimit)
-	}
+	// if c.DustLimit > c.ChanReserve {
+	// 	return ErrChanReserveTooSmall(c.ChanReserve, c.DustLimit)
+	// }
 
 	// Fail if we consider the channel reserve to be too large.  We
 	// currently fail if it is greater than 20% of the channel capacity.

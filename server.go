@@ -1142,9 +1142,9 @@ func newServer(cfg *Config, listenAddrs []net.Addr,
 			// limit, then we'll use the dust limit itself as the
 			// reserve as required by BOLT #2.
 			reserve := chanAmt / 100
-			if reserve < dustLimit {
-				reserve = dustLimit
-			}
+			// if reserve < dustLimit {
+			// 	reserve = dustLimit
+			// }
 
 			return reserve
 		},
