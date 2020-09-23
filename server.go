@@ -1142,9 +1142,6 @@ func newServer(cfg *Config, listenAddrs []net.Addr,
 			if err != nil {
 				srvrLog.Errorf("requiredRemoteChanReserve error: %v", err)
 			}
-			if reserve < dustLimit {
-				reserve = dustLimit
-			}
 
 			return reserve
 		},
