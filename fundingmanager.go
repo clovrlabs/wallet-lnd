@@ -985,6 +985,7 @@ func (f *fundingManager) stateStep(channel *channeldb.OpenChannel,
 func (f *fundingManager) advancePendingChannelState(
 	channel *channeldb.OpenChannel, pendingChanID [32]byte) error {
 
+	fndgLog.Infof("advancePendingChannelState - Before waitForFundingWithTimeout")
 	confChannel, err := f.waitForFundingWithTimeout(channel)
 	if err == ErrConfirmationTimeout {
 		// We'll get a timeout if the number of blocks mined
@@ -1043,6 +1044,8 @@ func (f *fundingManager) advancePendingChannelState(
 			"confirmation for ChannelPoint(%v): %v",
 			channel.FundingOutpoint, err)
 	}
+
+	fndgLog.Infof("advancePendingChannelState - Before waitForFundingWithTimeout")
 
 	// Success, funding transaction was confirmed.
 	chanID := lnwire.NewChanIDFromOutPoint(&channel.FundingOutpoint)
@@ -2456,6 +2459,7 @@ func (f *fundingManager) handleFundingLocked(fmsg *fundingLockedMsg) {
 	localDiscoverySignal, ok := f.localDiscoverySignals[fmsg.msg.ChanID]
 	f.localDiscoveryMtx.Unlock()
 
+	fndgLog.Infof("handleFundingLocked - Waiting for localDiscoverySignal to handle funding locked")
 	if ok {
 		// Before we proceed with processing the funding locked
 		// message, we'll wait for the local waitForFundingConfirmation
@@ -2476,6 +2480,8 @@ func (f *fundingManager) handleFundingLocked(fmsg *fundingLockedMsg) {
 		f.localDiscoveryMtx.Unlock()
 	}
 
+	fndgLog.Infof("handleFundingLocked - Finished localDiscoverySignal")
+
 	// First, we'll attempt to locate the channel whose funding workflow is
 	// being finalized by this message. We go to the database rather than
 	// our reservation map as we may have restarted, mid funding flow.
@@ -2494,6 +2500,8 @@ func (f *fundingManager) handleFundingLocked(fmsg *fundingLockedMsg) {
 			"ChannelID(%v), ignoring.", chanID)
 		return
 	}
+
+	fndgLog.Infof("handleFundingLocked - Inserting next revocation")
 
 	// The funding locked message contains the next commitment point we'll
 	// need to create the next commitment state for the remote party. So
@@ -2522,6 +2530,7 @@ func (f *fundingManager) handleFundingLocked(fmsg *fundingLockedMsg) {
 		f.barrierMtx.Unlock()
 	}()
 
+	fndgLog.Infof("handleFundingLocked - Adding new channel")
 	if err := fmsg.peer.AddNewChannel(channel, f.quit); err != nil {
 		fndgLog.Errorf("Unable to add new channel %v with peer %x: %v",
 			fmsg.peer.IdentityKey().SerializeCompressed(),
