@@ -480,7 +480,7 @@ func findPath(g *graphParams, r *RestrictParams, cfg *PathFindingConfig,
 	// balance available.
 	self := g.graph.sourceNode()
 
-	var splitNeeded bool
+	var splitNeeded, insufficientBalance bool
 
 	if source == self {
 		max, total, err := getOutgoingBalance(
@@ -493,7 +493,10 @@ func findPath(g *graphParams, r *RestrictParams, cfg *PathFindingConfig,
 		// If the total outgoing balance isn't sufficient, it will be
 		// impossible to complete the payment.
 		if total < amt {
-			return nil, errInsufficientBalance
+			if max < total {
+				return nil, errInsufficientBalance
+			}
+			insufficientBalance = true
 		}
 
 		// If there is only not enough capacity on a single route, it
@@ -928,7 +931,11 @@ func findPath(g *graphParams, r *RestrictParams, cfg *PathFindingConfig,
 		distance[source].amountToReceive-amt)
 	var e error
 	if splitNeeded {
-		e = extendedNoRouteError{err: errNoPathFound, amt: amt}
+		if insufficientBalance {
+			e = extendedNoRouteError{err: errInsufficientBalance, amt: amt}
+		} else {
+			e = extendedNoRouteError{err: errNoPathFound, amt: amt}
+		}
 	}
 	return pathEdges, e
 }

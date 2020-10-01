@@ -94,6 +94,8 @@ func (e extendedNoRouteError) Error() string {
 	switch e.err {
 	case errNoPathFound:
 		return fmt.Sprintf("unable to find a path to destination. Try to lower the amount to: %v", e.amt)
+	case errInsufficientBalance:
+		return fmt.Sprintf("insufficient local balance. Try to lower the amount to: %v", e.amt)
 	default:
 		return e.err.Error()
 	}
@@ -337,7 +339,7 @@ func (p *paymentSession) RequestRoute(maxAmt, feeLimit lnwire.MilliSatoshi,
 		// splitting. It won't be possible to create a complete set in
 		// any case, but the sent out partial payments would be held by
 		// the receiver until the mpp timeout.
-		case err == errInsufficientBalance:
+		case errors.Is(err, errInsufficientBalance):
 			p.log.Debug("not splitting because local balance " +
 				"is insufficient")
 
