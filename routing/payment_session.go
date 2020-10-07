@@ -343,7 +343,7 @@ func (p *paymentSession) RequestRoute(maxAmt, feeLimit lnwire.MilliSatoshi,
 			p.log.Debug("not splitting because local balance " +
 				"is insufficient")
 
-			return nil, err
+			return nil, errInsufficientBalance
 
 		case err != nil:
 			return nil, err
