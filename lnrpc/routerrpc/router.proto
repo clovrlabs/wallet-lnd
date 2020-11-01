@@ -664,6 +664,14 @@ message ForwardHtlcInterceptResponse {
     uint64 outgoing_requested_chan_id = 5;
 
     bytes onion_blob = 6;
+
+    enum FailureCode {
+        RESERVED = 0;
+
+        INCORRECT_OR_UNKNOWN_PAYMENT_DETAILS = 1;
+        TEMPORARY_CHANNEL_FAILURE = 15;
+    }
+    FailureCode failure_code = 7;
 }
 
 enum ResolveHoldForwardAction {
