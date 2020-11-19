@@ -878,13 +878,17 @@ func (c *OpenChannel) MarkAsOpen(openLoc lnwire.ShortChannelID) error {
 	defer c.Unlock()
 
 	previousChanID := c.ShortChanID()
+	fmt.Println("MarkAsOpen", previousChanID, openLoc)
 
 	if err := kvdb.Update(c.Db, func(tx kvdb.RwTx) error {
 		if previousChanID.IsFake() {
 			// duplicate packager under new confirmed short channel id.
 			if chanPackager, ok := c.Packager.(*ChannelPackager); ok {
-				chanPackager.DuplicatePackage(tx, previousChanID.ToUint64(),
-					openLoc.ToUint64())
+				if err := chanPackager.DuplicatePackage(tx, previousChanID.ToUint64(),
+					openLoc.ToUint64()); err != nil {
+					fmt.Println("MarkAsOpen error:", err)
+					return err
+				}
 			}
 		}
 

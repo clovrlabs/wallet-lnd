@@ -2406,6 +2406,7 @@ func (f *fundingManager) handleFundingConfirmation(
 		}
 	}
 
+	fndgLog.Errorf("before saving channel opening state")
 	// The funding transaction now being confirmed, we add this channel to
 	// the fundingManager's internal persistent state machine that we use
 	// to track the remaining process of the channel opening. This is
@@ -2415,18 +2416,24 @@ func (f *fundingManager) handleFundingConfirmation(
 	err := f.saveChannelOpeningState(
 		&fundingPoint, markedOpen, &confChannel.shortChanID,
 	)
+	fndgLog.Errorf("after saving channel opening state")
 	if err != nil {
+		fndgLog.Errorf("error saving channel opening state")
 		return fmt.Errorf("error setting channel state to markedOpen: %v",
 			err)
 	}
 
 	// Now that the channel has been fully confirmed and we successfully
 	// saved the opening state, we'll mark it as open within the database.
+	fndgLog.Errorf("Before mark as open")
 	err = completeChan.MarkAsOpen(confChannel.shortChanID)
 	if err != nil {
+		fndgLog.Errorf("error MarkAsOpen")
 		return fmt.Errorf("error setting channel pending flag to false: "+
 			"%v", err)
 	}
+
+	fndgLog.Errorf("After mark as open")
 
 	// Inform the ChannelNotifier that the channel has transitioned from
 	// pending open to open.
