@@ -874,11 +874,11 @@ func (c *OpenChannel) fullSync(tx kvdb.RwTx) error {
 // MarkAsOpen marks a channel as fully open given a locator that uniquely
 // describes its location within the chain.
 func (c *OpenChannel) MarkAsOpen(openLoc lnwire.ShortChannelID) error {
+	previousChanID := c.ShortChanID()
 	log.Infof("MarkAsOpen before lock")
 	c.Lock()
 	defer c.Unlock()
 	log.Infof("MarkAsOpen after lock")
-	previousChanID := c.ShortChanID()
 	log.Infof("MarkAsOpen %v %v", previousChanID, openLoc)
 
 	if err := kvdb.Update(c.Db, func(tx kvdb.RwTx) error {
