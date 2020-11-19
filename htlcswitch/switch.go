@@ -2107,9 +2107,16 @@ func (s *Switch) UpdateShortChanID(chanID lnwire.ChannelID) error {
 
 	// Try to update the link's short channel ID, returning early if this
 	// update failed.
+	oldID := link.ShortChanID()
 	shortChanID, err := link.UpdateShortChanID()
 	if err != nil {
 		return err
+	}
+
+	if oldID != shortChanID {
+		if err := s.replaceChanOldCiruites(link, oldID, shortChanID); err != nil {
+			return err
+		}
 	}
 
 	// Reject any blank short channel ids.
@@ -2144,6 +2151,56 @@ func (s *Switch) GetLinksByInterface(hop [33]byte) ([]ChannelLink, error) {
 	defer s.indexMtx.RUnlock()
 
 	return s.getLinks(hop)
+}
+
+func (s *Switch) replaceChanOldCiruites(
+	link ChannelLink, oldChanID, newChanID lnwire.ShortChannelID) error {
+
+	log.Infof("start updating confirmed channel circuit map")
+	openChan, err := s.cfg.DB.FetchChannel(*link.ChannelPoint())
+	if err != nil {
+		return err
+	}
+	pendingHtlcs := openChan.LocalCommitment.Htlcs
+	log.Infof("found channel with %v htlcs", len(pendingHtlcs))
+
+	// iterating over all pending htlcs, checking if needs to update.
+	for _, h := range pendingHtlcs {
+		if h.Incoming {
+			continue
+		}
+		log.Infof("processing incoming htlc %v", h)
+
+		// fetching all opened cirtuites for this payment hash
+		openCiruites := s.circuits.LookupByPaymentHash(h.RHash)
+		log.Infof("lookup by payment hash found %v circuites", len(openCiruites))
+
+		// going over all circuites that needs updated
+		for _, c := range openCiruites {
+
+			// we only update circuites for this specific confirmed channel.
+			if c.OutKey().ChanID != oldChanID {
+				continue
+			}
+
+			// replacing now the old outKey with the new one.
+			keyStone := Keystone{
+				InKey: c.InKey(),
+				OutKey: CircuitKey{
+					ChanID: newChanID,
+					HtlcID: c.OutKey().HtlcID,
+				},
+			}
+
+			// open the cirtuit so settlle/cancel can be routed backwards.
+			if err := s.circuits.OpenCircuits(keyStone); err != nil {
+				log.Infof("failed to update circuit map %v", err)
+				return err
+			}
+		}
+		log.Infof("circuit map updated sucessfully for payment hash %x", h.RHash)
+	}
+	return nil
 }
 
 // getLinks is function which returns the channel links of the peer by hop
