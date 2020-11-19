@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/btcsuite/btcwallet/walletdb"
 	"github.com/lightningnetwork/lnd/channeldb/kvdb"
 	"github.com/lightningnetwork/lnd/lnwire"
 )
@@ -417,6 +418,42 @@ func NewChannelPackager(source lnwire.ShortChannelID) *ChannelPackager {
 	return &ChannelPackager{
 		source: source,
 	}
+}
+
+func (*ChannelPackager) DuplicatePackage(tx kvdb.RwTx, sourceID, destinationID uint64) error {
+	fwdPkgBkt, err := tx.CreateTopLevelBucket(fwdPackagesKey)
+	if err != nil {
+		return err
+	}
+
+	// compute the source key and check if we have source bucket to copy.
+	source := makeLogKey(sourceID)
+	sourceBkt := fwdPkgBkt.NestedReadBucket(source[:])
+	if sourceBkt == nil {
+		return nil
+	}
+
+	// compute the destination key.
+	destination := makeLogKey(destinationID)
+
+	// copy the bucket under a new key.
+	return copyBucket(fwdPkgBkt, fwdPkgBkt, source[:], destination[:])
+}
+
+func copyBucket(oldParent, newParent walletdb.ReadWriteBucket, oldkey, newkey []byte) error {
+	oldBuck := oldParent.NestedReadWriteBucket(oldkey)
+	newBuck, err := newParent.CreateBucket(newkey)
+	if err != nil {
+		return err
+	}
+
+	err = oldBuck.ForEach(func(k, v []byte) error {
+		if v == nil {
+			return copyBucket(oldBuck, newBuck, k, k)
+		}
+		return newBuck.Put(k, v)
+	})
+	return err
 }
 
 // AddFwdPkg writes a newly locked in forwarding package to disk.
