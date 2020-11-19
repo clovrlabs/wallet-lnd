@@ -874,19 +874,22 @@ func (c *OpenChannel) fullSync(tx kvdb.RwTx) error {
 // MarkAsOpen marks a channel as fully open given a locator that uniquely
 // describes its location within the chain.
 func (c *OpenChannel) MarkAsOpen(openLoc lnwire.ShortChannelID) error {
+	log.Infof("MarkAsOpen before lock")
 	c.Lock()
 	defer c.Unlock()
-
+	log.Infof("MarkAsOpen after lock")
 	previousChanID := c.ShortChanID()
-	fmt.Println("MarkAsOpen", previousChanID, openLoc)
+	log.Infof("MarkAsOpen %v %v", previousChanID, openLoc)
 
 	if err := kvdb.Update(c.Db, func(tx kvdb.RwTx) error {
 		if previousChanID.IsFake() {
+			log.Infof("MarkAsOpen previous is fake")
 			// duplicate packager under new confirmed short channel id.
 			if chanPackager, ok := c.Packager.(*ChannelPackager); ok {
+				log.Infof("Before DuplicatePackage")
 				if err := chanPackager.DuplicatePackage(tx, previousChanID.ToUint64(),
 					openLoc.ToUint64()); err != nil {
-					fmt.Println("MarkAsOpen error:", err)
+					log.Infof("MarkAsOpen error:", err)
 					return err
 				}
 			}
