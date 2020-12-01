@@ -1003,6 +1003,7 @@ func newServer(cfg *Config, listenAddrs []net.Addr,
 	}
 
 	s.fundingMgr, err = funding.NewFundingManager(funding.Config{
+		HtlcNotifier:       s.htlcNotifier,
 		NoWumboChans:       !cfg.ProtocolOptions.Wumbo(),
 		IDKey:              nodeKeyECDH.PubKey(),
 		Wallet:             cc.Wallet,
