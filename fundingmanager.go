@@ -232,6 +232,7 @@ func newSerializedKey(pubKey *btcec.PublicKey) serializedPubKey {
 // within the configuration MUST be non-nil for the FundingManager to carry out
 // its duties.
 type fundingConfig struct {
+	HtlcNotifier *htlcswitch.HtlcNotifier
 	// NoWumboChans indicates if we're to reject all incoming wumbo channel
 	// requests, and also reject all outgoing wumbo channel requests.
 	NoWumboChans bool
@@ -3665,6 +3666,13 @@ func (f *fundingManager) updateShortChannelID(ch *channeldb.OpenChannel) (
 		if err != nil {
 			return nil, fmt.Errorf("unable to validate channel: %v", err)
 		}
+
+		if len(confirmedChan.LocalCommitment.Htlcs) > 0 {
+			fndgLog.Infof("waiting for htlcs started len=%v", len(confirmedChan.LocalCommitment.Htlcs))
+			if confirmedChan, err = f.waitForZeroHTLCs(ch); err != nil {
+				return nil, fmt.Errorf("error waiting for zero htlcs on channel %v", err)
+			}
+		}
 		if err := confirmedChan.MarkAsOpen(conf.shortChanID); err != nil {
 			return nil, fmt.Errorf("error setting channel pending flag to "+
 				"false: %v", err)
@@ -3678,6 +3686,61 @@ func (f *fundingManager) updateShortChannelID(ch *channeldb.OpenChannel) (
 		return nil, ErrFundingManagerShuttingDown
 	}
 	return &confirmedChan.ShortChannelID, nil
+}
+
+func (f *fundingManager) waitForZeroHTLCs(ch *channeldb.OpenChannel) (
+	*channeldb.OpenChannel, error) {
+
+	htlcClient, err := f.cfg.HtlcNotifier.SubscribeHtlcEvents()
+	if err != nil {
+		return nil, fmt.Errorf("unable to subscribe htlc events %v", err)
+	}
+	defer htlcClient.Cancel()
+
+	for {
+		select {
+		case update, ok := <-htlcClient.Updates():
+			if !ok {
+				return nil, fmt.Errorf("failed to wait for htlcs")
+			}
+
+			if !isChannelEvent(update, ch.ShortChannelID) {
+				continue
+			}
+
+			fndgLog.Infof("waiting 1 second for local commitment to be updated")
+			time.Sleep(1 * time.Second)
+			conChan, err := f.cfg.FindChannel(lnwire.NewChanIDFromOutPoint(&ch.FundingOutpoint))
+			if err != nil {
+				return nil, fmt.Errorf("failed to find channel %v %v", ch.ShortChannelID, err)
+			}
+			fndgLog.Infof("waiting for htlcs len=%v", len(conChan.LocalCommitment.Htlcs))
+			if len(conChan.LocalCommitment.Htlcs) == 0 {
+				return conChan, nil
+			}
+		}
+	}
+}
+
+func isChanHtlcKey(key htlcswitch.HtlcKey, chanID lnwire.ShortChannelID) bool {
+	return key.IncomingCircuit.ChanID == chanID || key.OutgoingCircuit.ChanID == chanID
+}
+
+func isChannelEvent(htlcEvent interface{},
+	chanID lnwire.ShortChannelID) bool {
+
+	switch e := htlcEvent.(type) {
+	case *htlcswitch.ForwardingEvent:
+		return isChanHtlcKey(e.HtlcKey, chanID)
+	case *htlcswitch.ForwardingFailEvent:
+		return isChanHtlcKey(e.HtlcKey, chanID)
+	case *htlcswitch.LinkFailEvent:
+		return isChanHtlcKey(e.HtlcKey, chanID)
+	case *htlcswitch.SettleEvent:
+		return isChanHtlcKey(e.HtlcKey, chanID)
+	default:
+		return false
+	}
 }
 
 type fakeIDsManager struct {
