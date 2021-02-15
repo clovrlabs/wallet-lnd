@@ -367,6 +367,7 @@ func getOutgoingBalance(node route.Vertex, outgoingChans map[uint64]struct{},
 		}
 
 		bandwidth, ok := bandwidthHints[chanID]
+		log.Infof("bandwidthHints: %#v, chanID: %v, bandwidth: %v, ok: %v", bandwidthHints, bandwidth, ok)
 
 		// If the bandwidth is not available, use the channel capacity.
 		// This can happen when a channel is added to the graph after
