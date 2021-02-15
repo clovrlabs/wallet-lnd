@@ -269,7 +269,7 @@ func (p *paymentSession) RequestRoute(maxAmt, feeLimit lnwire.MilliSatoshi,
 			return nil, err
 		}
 
-		p.log.Debugf("pathfinding for amt=%v", maxAmt)
+		p.log.Errorf("pathfinding for amt=%v", maxAmt)
 
 		// Get a routing graph.
 		routingGraph, cleanup, err := p.getRoutingGraph()
@@ -308,7 +308,7 @@ func (p *paymentSession) RequestRoute(maxAmt, feeLimit lnwire.MilliSatoshi,
 			// No splitting if this is the last shard.
 			isLastShard := activeShards+1 >= p.payment.MaxParts
 			if isLastShard {
-				p.log.Debugf("not splitting because shard "+
+				p.log.Errorf("not splitting because shard "+
 					"limit %v has been reached",
 					p.payment.MaxParts)
 
@@ -317,15 +317,17 @@ func (p *paymentSession) RequestRoute(maxAmt, feeLimit lnwire.MilliSatoshi,
 
 			var e extendedNoRouteError
 			if errors.As(err, &e) {
+				p.log.Errorf("Splitting amount: %v and using the smaller amount: %v", maxAmt, e.amt)
 				maxAmt = e.amt
 			} else {
+				p.log.Errorf("Splitting amount: %v and divide by 2: %v", maxAmt, maxAmt/2)
 				// This is where the magic happens. If we can't find a
 				// route, try it for half the amount.
 				maxAmt /= 2
 
 				// Put a lower bound on the minimum shard size.
 				if maxAmt < p.minShardAmt {
-					p.log.Debugf("not splitting because minimum "+
+					p.log.Errorf("not splitting because minimum "+
 						"shard amount %v has been reached",
 						p.minShardAmt)
 
@@ -340,7 +342,7 @@ func (p *paymentSession) RequestRoute(maxAmt, feeLimit lnwire.MilliSatoshi,
 		// any case, but the sent out partial payments would be held by
 		// the receiver until the mpp timeout.
 		case errors.Is(err, errInsufficientBalance):
-			p.log.Debug("not splitting because local balance " +
+			p.log.Errorf("not splitting because local balance " +
 				"is insufficient")
 
 			return nil, errInsufficientBalance
