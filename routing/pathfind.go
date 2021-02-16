@@ -901,6 +901,14 @@ func findPath(g *graphParams, r *RestrictParams, cfg *PathFindingConfig,
 		// Add the next hop to the list of path edges.
 		pathEdges = append(pathEdges, currentNodeWithDist.nextHop)
 
+		if splitNeeded {
+			log.Errorf("Removing fees - curentNode(dist): %v (%v) nextHop: %x", currentNodeWithDist.node.String(), currentNodeWithDist.dist, currentNodeWithDist.nextHop.Node.PubKeyBytes)
+			log.Errorf("Next hop channel id: %v, FeeBaseMSat: %v,  FeeProportionalMillionths: %v", (currentNodeWithDist.nextHop).ChannelID, (currentNodeWithDist.nextHop).FeeBaseMSat, (currentNodeWithDist.nextHop).FeeProportionalMillionths)
+			fees := (currentNodeWithDist.nextHop).ComputeFeeFromIncoming(amt)
+			log.Errorf("Removing fees - before: %v fee: %v after: %v", amt, fees, amt-fees)
+			amt -= fees
+		}
+
 		// Advance current node.
 		currentNode = currentNodeWithDist.nextHop.Node.PubKeyBytes
 
@@ -909,8 +917,6 @@ func findPath(g *graphParams, r *RestrictParams, cfg *PathFindingConfig,
 		// to source.
 		if currentNode == target {
 			break
-		} else if splitNeeded {
-			amt -= (currentNodeWithDist.nextHop).ComputeFeeFromIncoming(amt)
 		}
 	}
 
