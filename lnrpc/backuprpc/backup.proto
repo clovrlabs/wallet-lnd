@@ -2,10 +2,13 @@ syntax = "proto3";
 
 package backuprpc;
 
-message BackupEventSubscription {}
+message BackupEventSubscription {
+}
 
-message BackupEventUpdate {}
+message BackupEventUpdate {
+}
 
 service Backup {
-    rpc SubscribeBackupEvents (BackupEventSubscription) returns (stream BackupEventUpdate);    
+    rpc SubscribeBackupEvents (BackupEventSubscription)
+        returns (stream BackupEventUpdate);
 }

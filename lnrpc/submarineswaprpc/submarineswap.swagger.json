@@ -1,0 +1,165 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "submarineswaprpc/submarineswap.proto",
+    "version": "version not set"
+  },
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {},
+  "definitions": {
+    "UnspentAmountResponseUtxo": {
+      "type": "object",
+      "properties": {
+        "block_height": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "amount": {
+          "type": "string",
+          "format": "int64"
+        },
+        "txid": {
+          "type": "string"
+        },
+        "index": {
+          "type": "integer",
+          "format": "int64"
+        }
+      }
+    },
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "type_url": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string",
+          "format": "byte"
+        }
+      }
+    },
+    "runtimeError": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "string"
+        },
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "submarineswaprpcSubSwapClientInitResponse": {
+      "type": "object",
+      "properties": {
+        "preimage": {
+          "type": "string",
+          "format": "byte"
+        },
+        "hash": {
+          "type": "string",
+          "format": "byte"
+        },
+        "key": {
+          "type": "string",
+          "format": "byte"
+        },
+        "pubkey": {
+          "type": "string",
+          "format": "byte"
+        }
+      }
+    },
+    "submarineswaprpcSubSwapClientRefundResponse": {
+      "type": "object",
+      "properties": {
+        "txid": {
+          "type": "string",
+          "description": "/ The txid of the transaction."
+        }
+      }
+    },
+    "submarineswaprpcSubSwapClientWatchResponse": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "string"
+        },
+        "script": {
+          "type": "string",
+          "format": "byte"
+        }
+      }
+    },
+    "submarineswaprpcSubSwapServiceInitResponse": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "string"
+        },
+        "pubkey": {
+          "type": "string",
+          "format": "byte"
+        },
+        "lock_height": {
+          "type": "string",
+          "format": "int64"
+        }
+      }
+    },
+    "submarineswaprpcSubSwapServiceRedeemFeesResponse": {
+      "type": "object",
+      "properties": {
+        "amount": {
+          "type": "string",
+          "format": "int64"
+        }
+      }
+    },
+    "submarineswaprpcSubSwapServiceRedeemResponse": {
+      "type": "object",
+      "properties": {
+        "txid": {
+          "type": "string",
+          "description": "/ The txid of the transaction."
+        }
+      }
+    },
+    "submarineswaprpcUnspentAmountResponse": {
+      "type": "object",
+      "properties": {
+        "amount": {
+          "type": "string",
+          "format": "int64",
+          "title": "/ The total amount"
+        },
+        "lock_height": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "utxos": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/UnspentAmountResponseUtxo"
+          }
+        }
+      }
+    }
+  }
+}

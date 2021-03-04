@@ -242,6 +242,10 @@
             "$ref": "#/definitions/signrpcInputScript"
           },
           "description": "The set of fully valid input scripts requested."
+        },
+        "sig_hashes": {
+          "$ref": "#/definitions/signrpcTxSigHashes",
+          "description": "*\nThe pre-computed sighash midstate to be used when generating the final\nsighash for signing."
         }
       }
     },
@@ -379,6 +383,10 @@
             "$ref": "#/definitions/signrpcSignDescriptor"
           },
           "description": "A set of sign descriptors, for each input to be signed."
+        },
+        "sig_hashes": {
+          "$ref": "#/definitions/signrpcTxSigHashes",
+          "description": "*\nThe pre-computed sighash midstate to be used when generating the final\nsighash for signing."
         }
       }
     },
@@ -392,6 +400,10 @@
             "format": "byte"
           },
           "description": "A set of signatures realized in a fixed 64-byte format ordered in ascending\ninput order."
+        },
+        "sig_hashes": {
+          "$ref": "#/definitions/signrpcTxSigHashes",
+          "description": "*\nThe pre-computed sighash midstate to be used when generating the final\nsighash for signing."
         }
       }
     },
@@ -407,6 +419,23 @@
           "type": "string",
           "format": "byte",
           "description": "The script of the output being spent."
+        }
+      }
+    },
+    "signrpcTxSigHashes": {
+      "type": "object",
+      "properties": {
+        "hash_prev_outs": {
+          "type": "string",
+          "format": "byte"
+        },
+        "hash_sequence": {
+          "type": "string",
+          "format": "byte"
+        },
+        "hash_outputs": {
+          "type": "string",
+          "format": "byte"
         }
       }
     },
