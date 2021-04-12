@@ -906,7 +906,7 @@ func findPath(g *graphParams, r *RestrictParams, cfg *PathFindingConfig,
 			log.Errorf("Next hop channel id: %v, FeeBaseMSat: %v,  FeeProportionalMillionths: %v", (currentNodeWithDist.nextHop).ChannelID, (currentNodeWithDist.nextHop).FeeBaseMSat, (currentNodeWithDist.nextHop).FeeProportionalMillionths)
 			fees := (currentNodeWithDist.nextHop).ComputeFeeFromIncoming(amt)
 			log.Errorf("Removing fees - before: %v fee: %v after: %v", amt, fees, amt-fees)
-			amt -= fees
+			amt -= fees + 1
 		}
 
 		// Advance current node.
