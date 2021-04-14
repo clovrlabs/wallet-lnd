@@ -7,12 +7,14 @@ import (
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btclog"
 	"github.com/lightningnetwork/lnd/autopilot"
+	"github.com/lightningnetwork/lnd/backupnotifier"
 	"github.com/lightningnetwork/lnd/chainreg"
 	"github.com/lightningnetwork/lnd/channeldb"
 	"github.com/lightningnetwork/lnd/htlcswitch"
 	"github.com/lightningnetwork/lnd/invoices"
 	"github.com/lightningnetwork/lnd/lncfg"
 	"github.com/lightningnetwork/lnd/lnrpc/autopilotrpc"
+	"github.com/lightningnetwork/lnd/lnrpc/backuprpc"
 	"github.com/lightningnetwork/lnd/lnrpc/chainrpc"
 	"github.com/lightningnetwork/lnd/lnrpc/invoicesrpc"
 	"github.com/lightningnetwork/lnd/lnrpc/routerrpc"
@@ -74,6 +76,7 @@ type subRPCServerConfigs struct {
 	// instance within lnd in order to add, remove, list registered client
 	// towers, etc.
 	WatchtowerClientRPC *wtclientrpc.Config `group:"wtclientrpc" namespace:"wtclientrpc"`
+	BackupRPC           *backuprpc.Config   `group:"backuprpc" namespace:"backuprpc"`
 }
 
 // PopulateDependencies attempts to iterate through all the sub-server configs
@@ -100,7 +103,8 @@ func (s *subRPCServerConfigs) PopulateDependencies(cfg *Config,
 	anchorTowerClient wtclient.Client,
 	tcpResolver lncfg.TCPResolver,
 	genInvoiceFeatures func() *lnwire.FeatureVector,
-	rpcLogger btclog.Logger) error {
+	rpcLogger btclog.Logger,
+	backupNotifier *backupnotifier.BackupNotifier) error {
 
 	// First, we'll use reflect to obtain a version of the config struct
 	// that allows us to programmatically inspect its fields.
@@ -234,6 +238,32 @@ func (s *subRPCServerConfigs) PopulateDependencies(cfg *Config,
 		// RouterRPC isn't conditionally compiled and doesn't need to be
 		// populated using reflection.
 		case *routerrpc.Config:
+			subCfgValue := extractReflectValue(subCfg)
+
+			subCfgValue.FieldByName("NetworkDir").Set(
+				reflect.ValueOf(networkDir),
+			)
+			subCfgValue.FieldByName("MacService").Set(
+				reflect.ValueOf(macService),
+			)
+			subCfgValue.FieldByName("Router").Set(
+				reflect.ValueOf(chanRouter),
+			)
+			subCfgValue.FieldByName("RouterBackend").Set(
+				reflect.ValueOf(routerBackend),
+			)
+		case *backuprpc.Config:
+			subCfgValue := extractReflectValue(subCfg)
+
+			subCfgValue.FieldByName("NetworkDir").Set(
+				reflect.ValueOf(networkDir),
+			)
+			subCfgValue.FieldByName("MacService").Set(
+				reflect.ValueOf(macService),
+			)
+			subCfgValue.FieldByName("BackupNotifier").Set(
+				reflect.ValueOf(backupNotifier),
+			)
 
 		case *watchtowerrpc.Config:
 			subCfgValue := extractReflectValue(subCfg)
