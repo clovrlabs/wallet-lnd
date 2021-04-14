@@ -935,7 +935,7 @@ func (r *ChannelRouter) networkHandler() {
 			go func() {
 				defer r.wg.Done()
 				defer validationBarrier.CompleteJob()
-
+				log.Infof("router-got update  %T", update.msg)
 				// If this message has an existing dependency,
 				// then we'll wait until that has been fully
 				// validated before we proceed.
@@ -965,6 +965,8 @@ func (r *ChannelRouter) networkHandler() {
 				if err != nil {
 					return
 				}
+
+				log.Infof("adding topology change %T", update.msg)
 
 				// Send off a new notification for the newly
 				// accepted update.
@@ -1219,7 +1221,15 @@ func (r *ChannelRouter) processUpdate(msg interface{},
 		// perform any of the expensive checks below, so we'll
 		// short-circuit our path straight to adding the edge to our
 		// graph.
-		if r.cfg.AssumeChannelValid {
+		// We can also skip fetching the channel point if we created the
+		// announcement for an unconfirmed channel.
+		ourKey := r.selfNode.PubKeyBytes[:]
+		isOurEdge := bytes.Equal(msg.NodeKey1Bytes[:], ourKey) ||
+			bytes.Equal(msg.NodeKey2Bytes[:], ourKey)
+		shortID := lnwire.NewShortChanIDFromInt(msg.ChannelID)
+		if r.cfg.AssumeChannelValid ||
+			(isOurEdge && msg.AuthProof == nil && shortID.IsFake()) {
+
 			if err := r.cfg.Graph.AddChannelEdge(msg, op...); err != nil {
 				return fmt.Errorf("unable to add edge: %v", err)
 			}
