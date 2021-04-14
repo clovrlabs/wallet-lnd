@@ -191,11 +191,34 @@ type ListenerCfg struct {
 // listeners.
 type rpcListeners func() ([]*ListenerWithSignal, func(), error)
 
+/*
+Dependencies is used when LND is running inside another process as library.
+The caller then can use this interface to "inject" his own dependencies instead
+of letting LND creates them. It is usefull for example in logging, chain service, or
+any other dependency that is used outside LND and needs to be shared.
+*/
+type Dependencies interface {
+	ReadyChan() chan interface{}
+	ChainService() *neutrino.ChainService
+	ChanDB() *channeldb.DB
+}
+
 // Main is the true entry point for lnd. It accepts a fully populated and
 // validated main configuration struct and an optional listener config struct.
 // This function starts all main system components then blocks until a signal
 // is received on the shutdownChan at which point everything is shut down again.
-func Main(cfg *Config, lisCfg ListenerCfg, shutdownChan <-chan struct{}) error {
+func Main(cfg *Config, lisCfg ListenerCfg, shutdownChan <-chan struct{}, deps Dependencies) error {
+	// Hook interceptor for os signals.
+	signal.Intercept()
+
+	var readyChan chan interface{}
+	var chanDB *channeldb.DB
+
+	if deps != nil {
+		readyChan = deps.ReadyChan()
+		chanDB = deps.ChanDB()
+	}
+
 	defer func() {
 		ltndLog.Info("Shutdown complete\n")
 		err := cfg.LogWriter.Close()
@@ -258,16 +281,23 @@ func Main(cfg *Config, lisCfg ListenerCfg, shutdownChan <-chan struct{}) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	localChanDB, remoteChanDB, cleanUp, err := initializeDatabases(ctx, cfg)
-	switch {
-	case err == channeldb.ErrDryRunMigrationOK:
-		ltndLog.Infof("%v, exiting", err)
-		return nil
-	case err != nil:
-		return fmt.Errorf("unable to open databases: %v", err)
-	}
+	var localChanDB, remoteChanDB *channeldb.DB
+	localChanDB = chanDB
 
-	defer cleanUp()
+	if chanDB == nil {
+		var cleanUp func()
+		var err error
+		localChanDB, remoteChanDB, cleanUp, err = initializeDatabases(ctx, cfg)
+		switch {
+		case err == channeldb.ErrDryRunMigrationOK:
+			ltndLog.Infof("%v, exiting", err)
+			return nil
+		case err != nil:
+			return fmt.Errorf("unable to open databases: %v", err)
+		}
+
+		defer cleanUp()
+	}
 
 	// Only process macaroons if --no-macaroons isn't set.
 	serverOpts, restDialOpts, restListen, cleanUp, err := getTLSConfig(cfg)
@@ -304,17 +334,26 @@ func Main(cfg *Config, lisCfg ListenerCfg, shutdownChan <-chan struct{}) error {
 	}
 	var neutrinoCS *neutrino.ChainService
 	if mainChain.Node == "neutrino" {
-		neutrinoBackend, neutrinoCleanUp, err := initNeutrinoBackend(
-			cfg, mainChain.ChainDir,
-		)
-		if err != nil {
-			err := fmt.Errorf("unable to initialize neutrino "+
-				"backend: %v", err)
-			ltndLog.Error(err)
-			return err
+		if deps != nil {
+			neutrinoCS = deps.ChainService()
+			if err := neutrinoCS.Start(); err != nil {
+				return err
+			}
 		}
-		defer neutrinoCleanUp()
-		neutrinoCS = neutrinoBackend
+		if neutrinoCS == nil {
+			neutrinoBackend, neutrinoCleanUp, err := initNeutrinoBackend(
+				cfg,
+				mainChain.ChainDir,
+			)
+			if err != nil {
+				err := fmt.Errorf("Unable to initialize neutrino "+
+					"backend: %v", err)
+				ltndLog.Error(err)
+				return err
+			}
+			defer neutrinoCleanUp()
+			neutrinoCS = neutrinoBackend
+		}
 	}
 
 	var (
@@ -749,6 +788,10 @@ func Main(cfg *Config, lisCfg ListenerCfg, shutdownChan <-chan struct{}) error {
 		return err
 	}
 	defer rpcServer.Stop()
+
+	if readyChan != nil {
+		readyChan <- struct{}{}
+	}
 
 	// If we're not in regtest or simnet mode, We'll wait until we're fully
 	// synced to continue the start up of the remainder of the daemon. This
