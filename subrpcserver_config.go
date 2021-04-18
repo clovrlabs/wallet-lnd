@@ -293,10 +293,10 @@ func (s *subRPCServerConfigs) PopulateDependencies(cfg *Config,
 				reflect.ValueOf(macService),
 			)
 			subCfgValue.FieldByName("FeeEstimator").Set(
-				reflect.ValueOf(cc.feeEstimator),
+				reflect.ValueOf(cc.FeeEstimator),
 			)
 			subCfgValue.FieldByName("Wallet").Set(
-				reflect.ValueOf(cc.wallet),
+				reflect.ValueOf(cc.Wallet),
 			)
 
 		case *wtclientrpc.Config:
