@@ -216,7 +216,7 @@ func backupChanneldb(channelDB *channeldb.DB, destfile string) error {
 			})
 			return nil
 		})
-	})
+	}, func() {})
 	if err != nil {
 		return fmt.Errorf("ourNode.ForEachChannel: %w", err)
 	}
