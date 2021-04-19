@@ -109,7 +109,7 @@ func backupWalletdb(chainParams *chaincfg.Params, walletDB walletdb.DB, destFile
 }
 
 func dropSyncedBlock(chainParams *chaincfg.Params, wallet string) error {
-	wdb, err := walletdb.Open("bdb", wallet, false)
+	wdb, err := walletdb.Open("bdb", wallet, false, time.Second*60)
 	if err != nil {
 		return err
 	}
