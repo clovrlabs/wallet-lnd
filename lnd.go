@@ -309,20 +309,23 @@ func Main(cfg *Config, lisCfg ListenerCfg, shutdownChan <-chan struct{}, deps De
 
 	defer cleanUp()
 
-	// We use the first RPC listener as the destination for our REST proxy.
-	// If the listener is set to listen on all interfaces, we replace it
-	// with localhost, as we cannot dial it directly.
-	restProxyDest := cfg.RPCListeners[0].String()
-	switch {
-	case strings.Contains(restProxyDest, "0.0.0.0"):
-		restProxyDest = strings.Replace(
-			restProxyDest, "0.0.0.0", "127.0.0.1", 1,
-		)
+	var restProxyDest string
+	if len(cfg.RPCListeners) > 0 {
+		// We use the first RPC listener as the destination for our REST proxy.
+		// If the listener is set to listen on all interfaces, we replace it
+		// with localhost, as we cannot dial it directly.
+		restProxyDest = cfg.RPCListeners[0].String()
+		switch {
+		case strings.Contains(restProxyDest, "0.0.0.0"):
+			restProxyDest = strings.Replace(
+				restProxyDest, "0.0.0.0", "127.0.0.1", 1,
+			)
 
-	case strings.Contains(restProxyDest, "[::]"):
-		restProxyDest = strings.Replace(
-			restProxyDest, "[::]", "[::1]", 1,
-		)
+		case strings.Contains(restProxyDest, "[::]"):
+			restProxyDest = strings.Replace(
+				restProxyDest, "[::]", "[::1]", 1,
+			)
+		}
 	}
 
 	// Before starting the wallet, we'll create and start our Neutrino
