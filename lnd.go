@@ -281,8 +281,8 @@ func Main(cfg *Config, lisCfg ListenerCfg, shutdownChan <-chan struct{}, deps De
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	var localChanDB, remoteChanDB *channeldb.DB
-	localChanDB = chanDB
+	localChanDB := chanDB
+	remoteChanDB := chanDB
 
 	if chanDB == nil {
 		var cleanUp func()
