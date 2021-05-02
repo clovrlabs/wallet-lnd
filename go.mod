@@ -85,6 +85,8 @@ replace github.com/lightningnetwork/lnd/cert => ./cert
 
 replace github.com/lightningnetwork/lnd/clock => ./clock
 
+replace github.com/btcsuite/btcwallet => github.com/breez/btcwallet v0.11.1-0.20210502144735-b0097c0a4301
+
 replace git.schwanenlied.me/yawning/bsaes.git => github.com/Yawning/bsaes v0.0.0-20180720073208-c0276d75487e
 
 go 1.13
