@@ -120,6 +120,11 @@ var (
 	errUpfrontShutdownScriptNotSupported = errors.New("peer does not support" +
 		"option upfront shutdown script")
 
+	// errSkipFundingConfirmationNotSupported is returned if remote peer requires
+	// skip funding confirmation and this peer does not support it.
+	errSkipFundingConfirmationNotSupported = errors.New("peer does not " +
+		"support skip channel confirmation")
+
 	zeroID [32]byte
 )
 
@@ -278,6 +283,8 @@ func newSerializedKey(pubKey *btcec.PublicKey) serializedPubKey {
 // within the configuration MUST be non-nil for the FundingManager to carry out
 // its duties.
 type Config struct {
+	HtlcNotifier *htlcswitch.HtlcNotifier
+
 	// NoWumboChans indicates if we're to reject all incoming wumbo channel
 	// requests, and also reject all outgoing wumbo channel requests.
 	NoWumboChans bool
@@ -358,7 +365,7 @@ type Config struct {
 	// channel extended to it. The function is able to take into account
 	// the amount of the channel, and any funds we'll be pushed in the
 	// process to determine how many confirmations we'll require.
-	NumRequiredConfs func(btcutil.Amount, lnwire.MilliSatoshi) uint16
+	NumRequiredConfs func(btcutil.Amount, lnwire.MilliSatoshi, bool) uint16
 
 	// RequiredRemoteDelay is a function that maps the total amount in a
 	// proposed channel to the CSV delay that we'll require for the remote
@@ -514,6 +521,8 @@ type Manager struct {
 	handleFundingLockedMtx      sync.RWMutex
 	handleFundingLockedBarriers map[lnwire.ChannelID]struct{}
 
+	fakeIDSManager *fakeIDsManager
+
 	quit chan struct{}
 	wg   sync.WaitGroup
 }
@@ -546,6 +555,11 @@ var (
 	// channelOpeningState for each channel that is currently in the process
 	// of being opened.
 	channelOpeningStateBucket = []byte("channelOpeningState")
+
+	// fakeIDsBucket holds the used fake short channel ids. We maintain this
+	// set to be able to prune correctly and detect conflicts when a new fake
+	// id is needed.
+	fakeIDsBucket = []byte("fake-short-channel-ids")
 
 	// ErrChannelNotFound is an error returned when a channel is not known
 	// to us. In this case of the fundingManager, this error is returned
@@ -595,6 +609,12 @@ func (f *Manager) start() error {
 		return err
 	}
 
+	if f.fakeIDSManager, err = newFakeIDsManager(allChannels,
+		f.cfg.Wallet.Cfg.Database.ChannelGraph(),
+		f.cfg.Wallet.Cfg.Database); err != nil {
+
+		return err
+	}
 	for _, channel := range allChannels {
 		chanID := lnwire.NewChanIDFromOutPoint(&channel.FundingOutpoint)
 
@@ -956,7 +976,33 @@ func (f *Manager) stateStep(channel *channeldb.OpenChannel,
 	// fundingLocked was sent to peer, but the channel was not added to the
 	// router graph and the channel announcement was not sent.
 	case fundingLockedSent:
-		err := f.addToRouterGraph(channel, shortChanID)
+		// in case we skipped confirmation, now that the channel is fully operational
+		// we still want to wait for the first confirmation to update the real short
+		// channel id.
+		var err error
+		if shortChanID.IsFake() {
+			// Adding the fake channel to the router graph
+			graph := f.cfg.Wallet.Cfg.Database.ChannelGraph()
+			fakeID := shortChanID
+			if err = f.addToRouterGraph(channel, shortChanID); err != nil {
+				return fmt.Errorf("failed adding to "+
+					"router graph: %v", err)
+			}
+			// Wait for confirmation and update the real short channel id.
+			if shortChanID, err = f.updateShortChannelID(channel); err != nil {
+				return fmt.Errorf("error waiting for "+
+					"funding confirmation: %v", err)
+			}
+			// Delete the fake channel from the graph.
+			if err = graph.DeleteChannelEdges(fakeID.ToUint64()); err != nil {
+				return fmt.Errorf("failed to remove fake channel from "+
+					"the graph: %v", err)
+			}
+			if err := f.fakeIDSManager.releaseFakeID(*fakeID); err != nil {
+				return fmt.Errorf("failed to release fake id %v", err)
+			}
+		}
+		err = f.addToRouterGraph(channel, shortChanID)
 		if err != nil {
 			return fmt.Errorf("failed adding to "+
 				"router graph: %v", err)
@@ -1042,7 +1088,24 @@ func (f *Manager) stateStep(channel *channeldb.OpenChannel,
 func (f *Manager) advancePendingChannelState(
 	channel *channeldb.OpenChannel, pendingChanID [32]byte) error {
 
-	confChannel, err := f.waitForFundingWithTimeout(channel)
+	var (
+		confChannel *confirmedChannel
+		err         error
+	)
+	if channel.NumConfsRequired == 0 {
+		fakeID, err := f.fakeIDSManager.markSkipped(pendingChanID)
+		if err != nil {
+			return err
+		}
+		log.Infof("skipping confirmation for channel %v",
+			channel.FundingOutpoint)
+		confChannel = &confirmedChannel{
+			fundingTx:   channel.FundingTxn,
+			shortChanID: fakeID,
+		}
+	} else {
+		confChannel, err = f.waitForFundingWithTimeout(channel)
+	}
 	if err == ErrConfirmationTimeout {
 		// We'll get a timeout if the number of blocks mined
 		// since the channel was initiated reaches
@@ -1340,11 +1403,16 @@ func (f *Manager) handleFundingOpen(peer lnpeer.Peer,
 	// the amount of the channel, and also if any funds are being pushed to
 	// us. If a depth value was set by our channel acceptor, we will use
 	// that value instead.
-	numConfsReq := f.cfg.NumRequiredConfs(msg.FundingAmount, msg.PushAmount)
+	remoteFeatures := peer.RemoteFeatures()
+	skipConfirmationOptional := remoteFeatures.HasFeature(
+		lnwire.SkipFundingConfirmationOptional)
+
+	numConfsReq := f.cfg.NumRequiredConfs(msg.FundingAmount,
+		msg.PushAmount, skipConfirmationOptional)
+	reservation.SetNumConfsRequired(numConfsReq)
 	if acceptorResp.MinAcceptDepth != 0 {
 		numConfsReq = acceptorResp.MinAcceptDepth
 	}
-	reservation.SetNumConfsRequired(numConfsReq)
 
 	// We'll also validate and apply all the constraints the initiating
 	// party is attempting to dictate for our commitment transaction.
@@ -2131,7 +2199,8 @@ func (f *Manager) waitForFundingWithTimeout(
 	cancelChan := make(chan struct{})
 
 	f.wg.Add(1)
-	go f.waitForFundingConfirmation(ch, cancelChan, confChan)
+	go f.waitForFundingConfirmation(
+		ch, cancelChan, confChan, uint32(ch.NumConfsRequired))
 
 	// If we are not the initiator, we have no money at stake and will
 	// timeout waiting for the funding transaction to confirm after a
@@ -2188,7 +2257,7 @@ func makeFundingScript(channel *channeldb.OpenChannel) ([]byte, error) {
 // NOTE: This MUST be run as a goroutine.
 func (f *Manager) waitForFundingConfirmation(
 	completeChan *channeldb.OpenChannel, cancelChan <-chan struct{},
-	confChan chan<- *confirmedChannel) {
+	confChan chan<- *confirmedChannel, numConfs uint32) {
 
 	defer f.wg.Done()
 	defer close(confChan)
@@ -2203,7 +2272,6 @@ func (f *Manager) waitForFundingConfirmation(
 			err)
 		return
 	}
-	numConfs := uint32(completeChan.NumConfsRequired)
 	confNtfn, err := f.cfg.Notifier.RegisterConfirmationsNtfn(
 		&txid, fundingScript, numConfs,
 		completeChan.FundingBroadcastHeight,
@@ -2346,10 +2414,12 @@ func (f *Manager) handleFundingConfirmation(
 	// Now that that the channel has been fully confirmed, we'll request
 	// that the wallet fully verify this channel to ensure that it can be
 	// used.
-	err := f.cfg.Wallet.ValidateChannel(completeChan, confChannel.fundingTx)
-	if err != nil {
-		// TODO(roasbeef): delete chan state?
-		return fmt.Errorf("unable to validate channel: %v", err)
+	if !confChannel.shortChanID.IsFake() {
+		err := f.cfg.Wallet.ValidateChannel(completeChan, confChannel.fundingTx)
+		if err != nil {
+			// TODO(roasbeef): delete chan state?
+			return fmt.Errorf("unable to validate channel: %v", err)
+		}
 	}
 
 	// The funding transaction now being confirmed, we add this channel to
@@ -2358,7 +2428,7 @@ func (f *Manager) handleFundingConfirmation(
 	// useful to resume the opening process in case of restarts. We set the
 	// opening state before we mark the channel opened in the database,
 	// such that we can receover from one of the db writes failing.
-	err = f.saveChannelOpeningState(
+	err := f.saveChannelOpeningState(
 		&fundingPoint, markedOpen, &confChannel.shortChanID,
 	)
 	if err != nil {
@@ -3594,4 +3664,207 @@ func (f *Manager) deleteChannelOpeningState(chanPoint *wire.OutPoint) error {
 
 		return bucket.Delete(outpointBytes.Bytes())
 	}, func() {})
+}
+
+// Here we wait for confirmation to update the real short channel id for this
+// not yet confirmed channel.
+func (f *Manager) updateShortChannelID(ch *channeldb.OpenChannel) (
+	*lnwire.ShortChannelID, error) {
+
+	log.Infof("waiting for confirmation to update short channel id")
+	confirmedChan := ch
+	confChan := make(chan *confirmedChannel, 1)
+	cancelChan := make(chan struct{})
+	skipChan := make(chan lnwire.ShortChannelID)
+
+	f.wg.Add(1)
+	go f.waitForFundingConfirmation(ch, cancelChan, confChan, 1)
+	defer close(skipChan)
+	defer close(cancelChan)
+
+	select {
+	case conf, ok := <-confChan:
+		var err error
+		if !ok {
+			return nil, fmt.Errorf("failed to wait for funding confirmation")
+		}
+		confirmedChan, err = f.cfg.FindChannel(lnwire.NewChanIDFromOutPoint(&ch.FundingOutpoint))
+		if err != nil {
+			return nil, fmt.Errorf("failed to find channel %v %v", ch.ShortChannelID, err)
+		}
+		err = f.cfg.Wallet.ValidateChannel(confirmedChan, conf.fundingTx)
+		if err != nil {
+			return nil, fmt.Errorf("unable to validate channel: %v", err)
+		}
+
+		if len(confirmedChan.LocalCommitment.Htlcs) > 0 {
+			log.Infof("waiting for htlcs started len=%v", len(confirmedChan.LocalCommitment.Htlcs))
+			if confirmedChan, err = f.waitForZeroHTLCs(ch); err != nil {
+				return nil, fmt.Errorf("error waiting for zero htlcs on channel %v", err)
+			}
+		}
+		if err := confirmedChan.MarkAsOpen(conf.shortChanID); err != nil {
+			return nil, fmt.Errorf("error setting channel pending flag to "+
+				"false: %v", err)
+		}
+		if err := f.cfg.ReportShortChanID(confirmedChan.FundingOutpoint); err != nil {
+			log.Errorf("unable to report short chan id: %v", err)
+		}
+	case <-f.quit:
+		// The fundingManager is shutting down, and will resume wait on
+		// startup.
+		return nil, ErrFundingManagerShuttingDown
+	}
+	return &confirmedChan.ShortChannelID, nil
+}
+
+func (f *Manager) waitForZeroHTLCs(ch *channeldb.OpenChannel) (
+	*channeldb.OpenChannel, error) {
+
+	htlcClient, err := f.cfg.HtlcNotifier.SubscribeHtlcEvents()
+	if err != nil {
+		return nil, fmt.Errorf("unable to subscribe htlc events %v", err)
+	}
+	defer htlcClient.Cancel()
+
+	for {
+		select {
+		case update, ok := <-htlcClient.Updates():
+			if !ok {
+				return nil, fmt.Errorf("failed to wait for htlcs")
+			}
+
+			if !isChannelEvent(update, ch.ShortChannelID) {
+				continue
+			}
+
+			log.Infof("waiting 1 second for local commitment to be updated")
+			time.Sleep(1 * time.Second)
+			conChan, err := f.cfg.FindChannel(lnwire.NewChanIDFromOutPoint(&ch.FundingOutpoint))
+			if err != nil {
+				return nil, fmt.Errorf("failed to find channel %v %v", ch.ShortChannelID, err)
+			}
+			log.Infof("waiting for htlcs len=%v", len(conChan.LocalCommitment.Htlcs))
+			if len(conChan.LocalCommitment.Htlcs) == 0 {
+				return conChan, nil
+			}
+		}
+	}
+}
+
+func isChanHtlcKey(key htlcswitch.HtlcKey, chanID lnwire.ShortChannelID) bool {
+	return key.IncomingCircuit.ChanID == chanID || key.OutgoingCircuit.ChanID == chanID
+}
+
+func isChannelEvent(htlcEvent interface{},
+	chanID lnwire.ShortChannelID) bool {
+
+	switch e := htlcEvent.(type) {
+	case *htlcswitch.ForwardingEvent:
+		return isChanHtlcKey(e.HtlcKey, chanID)
+	case *htlcswitch.ForwardingFailEvent:
+		return isChanHtlcKey(e.HtlcKey, chanID)
+	case *htlcswitch.LinkFailEvent:
+		return isChanHtlcKey(e.HtlcKey, chanID)
+	case *htlcswitch.SettleEvent:
+		return isChanHtlcKey(e.HtlcKey, chanID)
+	default:
+		return false
+	}
+}
+
+type fakeIDsManager struct {
+	db *channeldb.DB
+}
+
+func newFakeIDsManager(channels []*channeldb.OpenChannel,
+	graph *channeldb.ChannelGraph, db *channeldb.DB) (*fakeIDsManager, error) {
+
+	// We would like to prune from the fake ids bucket all those that are not
+	// in use anymore. We start by create a mapping between ids to channels.
+	idsToChannels := make(map[uint64]*channeldb.OpenChannel, len(channels))
+	for _, c := range channels {
+		shortID := c.ShortChannelID
+		if shortID.IsFake() {
+			idsToChannels[shortID.ToUint64()] = c
+		}
+	}
+
+	// We marke each fake id in our bucket that is not associated with
+	// a pending or opened channel for prune.
+	var idsToPrune [][]byte
+	err := kvdb.Update(db, func(tx kvdb.RwTx) error {
+		fakeIDsBucket, err := tx.CreateTopLevelBucket(fakeIDsBucket)
+		if err != nil {
+			return err
+		}
+		return fakeIDsBucket.ForEach(func(k, v []byte) error {
+			shortID := byteOrder.Uint64(k)
+			_, exists := idsToChannels[shortID]
+			if !exists {
+				log.Infof("prunning fake id from graph %v", shortID)
+				idsToPrune = append(idsToPrune, k)
+			}
+			return nil
+		})
+	}, func() {})
+	if err != nil {
+		return nil, err
+	}
+
+	// We prune first from the graph.
+	for _, id := range idsToPrune {
+		shortID := byteOrder.Uint64(id)
+		if err = graph.DeleteChannelEdges(shortID); err != nil {
+			log.Debugf("failed to delete fake edge, probably "+
+				"already deleted %v: %v", shortID, err)
+		}
+	}
+
+	// Now we can safely remove from the fake id store.
+	err = kvdb.Update(db, func(tx kvdb.RwTx) error {
+		fakeIDsBucket := tx.ReadWriteBucket(fakeIDsBucket)
+		for _, id := range idsToPrune {
+			if err := fakeIDsBucket.Delete(id); err != nil {
+				return err
+			}
+		}
+		return nil
+	}, func() {})
+	if err != nil {
+		return nil, err
+	}
+
+	return &fakeIDsManager{db: db}, nil
+}
+
+func (f *fakeIDsManager) markSkipped(
+	pendingID [32]byte) (lnwire.ShortChannelID, error) {
+
+	// We generate the short channel id from the random pending id
+	// We make sure the blockHeight will be under 2^18 = 262144.
+	shortChanID := byteOrder.Uint64(pendingID[:8])
+	fakeID := lnwire.NewFakeShortChanIDFromInt(shortChanID)
+	log.Infof("generated fake short channel id %v", fakeID)
+
+	err := kvdb.Update(f.db, func(tx kvdb.RwTx) error {
+		fakeIDsBucket := tx.ReadWriteBucket(fakeIDsBucket)
+		var id = make([]byte, 8)
+		byteOrder.PutUint64(id[:8], fakeID.ToUint64())
+		return fakeIDsBucket.Put(id, []byte{})
+	}, func() {})
+	return fakeID, err
+}
+
+func (f *fakeIDsManager) releaseFakeID(
+	fakeID lnwire.ShortChannelID) error {
+
+	log.Infof("releasing fake short channel id %v", fakeID)
+	err := kvdb.Update(f.db, func(tx kvdb.RwTx) error {
+		fakeIDsBucket := tx.ReadWriteBucket(fakeIDsBucket)
+		var id = make([]byte, 8)
+		byteOrder.PutUint64(id[:8], fakeID.ToUint64())
+		return fakeIDsBucket.Delete(id)
+	}, func() {})
+	return err
 }
