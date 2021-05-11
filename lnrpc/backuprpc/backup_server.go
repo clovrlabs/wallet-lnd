@@ -93,7 +93,7 @@ func New(cfg *Config) (*Server, lnrpc.MacaroonPerms, error) {
 		// At this point, we know that the backkup macaroon
 		// doesn't yet, exist, so we need to create it with the help of
 		// the main macaroon service.
-		backupMac, err := cfg.MacService.Oven.NewMacaroon(
+		backupMac, err := cfg.MacService.NewMacaroon(
 			context.Background(), bakery.LatestVersion, nil,
 			macaroonOps...,
 		)

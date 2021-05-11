@@ -91,7 +91,7 @@ func New(cfg *Config) (*Server, lnrpc.MacaroonPerms, error) {
 		// At this point, we know that the breez backuperswapper macaroon
 		// doesn't yet, exist, so we need to create it with the help of
 		// the main macaroon service.
-		breezBackupMac, err := cfg.MacService.Oven.NewMacaroon(
+		breezBackupMac, err := cfg.MacService.NewMacaroon(
 			context.Background(), bakery.LatestVersion, nil,
 			macaroonOps...,
 		)

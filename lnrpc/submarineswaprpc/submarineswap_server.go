@@ -128,7 +128,7 @@ func New(cfg *Config) (*Server, lnrpc.MacaroonPerms, error) {
 		// At this point, we know that the submarine swapper macaroon
 		// doesn't yet, exist, so we need to create it with the help of
 		// the main macaroon service.
-		submarineSwapMac, err := cfg.MacService.Oven.NewMacaroon(
+		submarineSwapMac, err := cfg.MacService.NewMacaroon(
 			context.Background(), bakery.LatestVersion, nil,
 			macaroonOps...,
 		)
