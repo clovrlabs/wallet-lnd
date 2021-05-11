@@ -917,6 +917,13 @@ func startBeforeSynced(cfg *Config, registeredChains *chainreg.ChainRegistry) bo
 func getTLSConfig(cfg *Config) ([]grpc.ServerOption, []grpc.DialOption,
 	func(net.Addr) (net.Listener, error), func(), error) {
 
+	rpcsLog.Infof("getTLSConfig cfg.TLSCertPath=%v, cfg.TLSKeyPath=%v", cfg.TLSCertPath, cfg.TLSKeyPath)
+	if fileExists(cfg.TLSCertPath) {
+		rpcsLog.Infof("cfg.TLSCertPath exists")
+	}
+	if fileExists(cfg.TLSKeyPath) {
+		rpcsLog.Infof("cfg.TLSKeyPath exists")
+	}
 	// Ensure we create TLS key and certificate if they don't exist.
 	if !fileExists(cfg.TLSCertPath) && !fileExists(cfg.TLSKeyPath) {
 		rpcsLog.Infof("Generating TLS certificates...")
