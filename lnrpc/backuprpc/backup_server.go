@@ -11,6 +11,7 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/lightningnetwork/lnd/lnrpc"
+	"github.com/lightningnetwork/lnd/macaroons"
 	"google.golang.org/grpc"
 	"gopkg.in/macaroon-bakery.v2/bakery"
 )
@@ -94,7 +95,7 @@ func New(cfg *Config) (*Server, lnrpc.MacaroonPerms, error) {
 		// doesn't yet, exist, so we need to create it with the help of
 		// the main macaroon service.
 		backupMac, err := cfg.MacService.NewMacaroon(
-			context.Background(), bakery.LatestVersion, nil,
+			context.Background(), macaroons.DefaultRootKeyID,
 			macaroonOps...,
 		)
 		if err != nil {

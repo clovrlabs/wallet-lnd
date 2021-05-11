@@ -15,6 +15,7 @@ import (
 	"github.com/lightningnetwork/lnd/lnwallet"
 	"github.com/lightningnetwork/lnd/lnwallet/btcwallet"
 	"github.com/lightningnetwork/lnd/lnwallet/chainfee"
+	"github.com/lightningnetwork/lnd/macaroons"
 	"github.com/lightningnetwork/lnd/submarineswap"
 	"github.com/lightningnetwork/lnd/sweep"
 	"google.golang.org/grpc"
@@ -129,7 +130,7 @@ func New(cfg *Config) (*Server, lnrpc.MacaroonPerms, error) {
 		// doesn't yet, exist, so we need to create it with the help of
 		// the main macaroon service.
 		submarineSwapMac, err := cfg.MacService.NewMacaroon(
-			context.Background(), bakery.LatestVersion, nil,
+			context.Background(), macaroons.DefaultRootKeyID,
 			macaroonOps...,
 		)
 		if err != nil {
