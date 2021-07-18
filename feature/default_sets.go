@@ -60,4 +60,8 @@ var defaultSetDesc = setDesc{
 	lnwire.AMPRequired: {
 		SetInvoiceAmp: {}, // 9A
 	},
+	lnwire.SkipFundingConfirmationOptional: {
+		SetInit:    {}, // I
+		SetNodeAnn: {}, // N
+	},
 }
