@@ -236,7 +236,7 @@ func (h *htlcIncomingContestResolver) Resolve() (ContractResolver, error) {
 
 		resolution, err := h.Registry.NotifyExitHopHtlc(
 			h.htlc.RHash, h.htlc.Amt, h.htlcExpiry, currentHeight,
-			circuitKey, hodlChan, payload,
+			circuitKey, hodlChan, payload, false,
 		)
 		if err != nil {
 			return nil, err

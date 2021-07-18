@@ -872,13 +872,14 @@ func (i *InvoiceRegistry) processAMP(ctx invoiceUpdateCtx) error {
 func (i *InvoiceRegistry) NotifyExitHopHtlc(rHash lntypes.Hash,
 	amtPaid lnwire.MilliSatoshi, expiry uint32, currentHeight int32,
 	circuitKey channeldb.CircuitKey, hodlChan chan<- interface{},
-	payload Payload) (HtlcResolution, error) {
+	payload Payload, hold bool) (HtlcResolution, error) {
 
 	// Create the update context containing the relevant details of the
 	// incoming htlc.
 	ctx := invoiceUpdateCtx{
 		hash:                 rHash,
 		circuitKey:           circuitKey,
+		hold:                 hold,
 		amtPaid:              amtPaid,
 		expiry:               expiry,
 		currentHeight:        currentHeight,

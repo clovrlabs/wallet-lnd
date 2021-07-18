@@ -28,7 +28,7 @@ type Registry interface {
 	NotifyExitHopHtlc(payHash lntypes.Hash, paidAmount lnwire.MilliSatoshi,
 		expiry uint32, currentHeight int32,
 		circuitKey channeldb.CircuitKey, hodlChan chan<- interface{},
-		payload invoices.Payload) (invoices.HtlcResolution, error)
+		payload invoices.Payload, hold bool) (invoices.HtlcResolution, error)
 
 	// HodlUnsubscribeAll unsubscribes from all htlc resolutions.
 	HodlUnsubscribeAll(subscriber chan<- interface{})

@@ -15,6 +15,7 @@ import (
 type invoiceUpdateCtx struct {
 	hash                 lntypes.Hash
 	circuitKey           channeldb.CircuitKey
+	hold                 bool
 	amtPaid              lnwire.MilliSatoshi
 	expiry               uint32
 	currentHeight        int32
@@ -182,8 +183,10 @@ func updateMpp(ctx *invoiceUpdateCtx,
 	if ctx.mpp.TotalMsat() < inv.Terms.Value {
 		return nil, ctx.failRes(ResultHtlcSetTotalTooLow), nil
 	}
-
 	htlcSet := inv.HTLCSet(setID, channeldb.HtlcStateAccepted)
+
+	// Check whether this invoice is hold invoice or the channel is fake.
+	hodlInvoice := inv.HodlInvoice || ctx.hold
 
 	// Check whether total amt matches other htlcs in the set.
 	var newSetTotal lnwire.MilliSatoshi
@@ -236,7 +239,7 @@ func updateMpp(ctx *invoiceUpdateCtx,
 
 	// Check to see if we can settle or this is an hold invoice and
 	// we need to wait for the preimage.
-	if inv.HodlInvoice {
+	if hodlInvoice {
 		update.State = &channeldb.InvoiceStateUpdateDesc{
 			NewState: channeldb.ContractAccepted,
 			SetID:    setID,
@@ -431,7 +434,7 @@ func updateLegacy(ctx *invoiceUpdateCtx,
 
 	// Check to see if we can settle or this is an hold invoice and we need
 	// to wait for the preimage.
-	if inv.HodlInvoice {
+	if inv.HodlInvoice || ctx.hold {
 		update.State = &channeldb.InvoiceStateUpdateDesc{
 			NewState: channeldb.ContractAccepted,
 		}
