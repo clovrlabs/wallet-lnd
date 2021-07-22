@@ -26,7 +26,7 @@ import (
 )
 
 var (
-	count := 0
+	count = int(0)
 	// nodeBucket is a bucket which houses all the vertices or nodes within
 	// the channel graph. This bucket has a single-sub bucket which adds an
 	// additional index from pubkey -> alias. Within the top-level of this
@@ -4131,7 +4131,9 @@ func deserializeChanEdgePolicy(r io.Reader,
 	nodes kvdb.RBucket) (*ChannelEdgePolicy, error) {
 
 	count++
-	log.Infof("deserializeChanEdgePolicy %v", count)
+	if count%20 == 0 {
+		log.Infof("deserializeChanEdgePolicy %v", count)
+	}
 	edge := &ChannelEdgePolicy{}
 
 	var err error
