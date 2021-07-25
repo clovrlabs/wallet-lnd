@@ -418,7 +418,7 @@ func findPath(g *graphParams, r *RestrictParams, cfg *PathFindingConfig,
 	edgesExpanded := 0
 	defer func() {
 		timeElapsed := time.Since(start)
-		log.Infof("Pathfinding perf metrics: nodes=%v, edges=%v, "+
+		log.Errorf("Pathfinding perf metrics: nodes=%v, edges=%v, "+
 			"time=%v", nodesVisited, edgesExpanded, timeElapsed)
 	}()
 
