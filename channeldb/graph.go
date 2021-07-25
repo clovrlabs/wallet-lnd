@@ -4131,7 +4131,7 @@ func deserializeChanEdgePolicy(r io.Reader,
 	nodes kvdb.RBucket) (*ChannelEdgePolicy, error) {
 
 	count++
-	if count%20 == 0 {
+	if count%10000 == 0 {
 		log.Infof("deserializeChanEdgePolicy %v", count)
 	}
 	edge := &ChannelEdgePolicy{}
