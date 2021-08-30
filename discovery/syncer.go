@@ -1538,7 +1538,7 @@ func (g *GossipSyncer) handleHistoricalSync(req *historicalSyncReq) {
 	// We'll go back to our initial syncingChans state in order to request
 	// the remote peer to give us all of the channel IDs they know of
 	// starting from the genesis block.
-	g.genHistoricalChanRangeQuery = true
+	g.genHistoricalChanRangeQuery = false
 	g.setSyncState(syncingChans)
 	close(req.doneChan)
 }
