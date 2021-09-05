@@ -91,10 +91,22 @@ type MissionControl interface {
 	// state and actual probability estimates.
 	GetHistorySnapshot() *routing.MissionControlSnapshot
 
+	// ImportHistory imports the mission control snapshot to our internal
+	// state. This import will only be applied in-memory, and will not be
+	// persisted across restarts.
+	ImportHistory(*routing.MissionControlSnapshot) error
+
 	// GetPairHistorySnapshot returns the stored history for a given node
 	// pair.
 	GetPairHistorySnapshot(fromNode,
 		toNode route.Vertex) routing.TimedPairResult
+
+	// GetConfig gets mission control's current config.
+	GetConfig() *routing.MissionControlConfig
+
+	// SetConfig sets mission control's config to the values provided, if
+	// they are valid.
+	SetConfig(cfg *routing.MissionControlConfig) error
 }
 
 // QueryRoutes attempts to query the daemons' Channel Router for a possible
