@@ -835,6 +835,15 @@ func Main(cfg *Config, lisCfg ListenerCfg, shutdownChan <-chan struct{}, deps De
 					return err
 				}
 
+				if neutrinoCS != nil {
+					blockStamp, err := neutrinoCS.BestBlock()
+					if err != nil {
+						ltndLog.Errorf("failed to get ChainService().BestBlock(): %v", err)
+					} else if blockStamp != nil {
+						lastHeaderTimestamp = blockStamp.Timestamp.Unix()
+					}
+				}
+
 				// Check if we are instructed to wait only for headers to be synced
 				// with chain and skip waiting for the initial rescan.
 				if cfg.InitialHeadersSyncDelta > 0 {
