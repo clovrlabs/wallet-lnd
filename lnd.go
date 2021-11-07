@@ -836,13 +836,14 @@ func Main(cfg *Config, lisCfg ListenerCfg, shutdownChan <-chan struct{}, deps De
 				}
 
 				if neutrinoCS != nil {
-					blockStamp, err := neutrinoCS.BestBlock()
-					ltndLog.Infof("got best block: %v, error = %v", blockStamp, err)
-					if err != nil {
-						ltndLog.Errorf("failed to get ChainService().BestBlock(): %v", err)
-					} else if blockStamp != nil {
-						lastHeaderTimestamp = blockStamp.Timestamp.Unix()
-						ltndLog.Infof("got lastHeaderTimestamp from neutrino: %v", lastHeaderTimestamp)
+					blockStamp, err1 := neutrinoCS.BestBlock()
+					tipHeader, tipHeight, err2 := neutrinoCS.BlockHeaders.ChainTip()
+					ltndLog.Infof("got blockStamp: %v, error = %v", blockStamp, err1)
+					ltndLog.Infof("got tipHeight: %v, error = %v", tipHeight, err2)
+					if err1 != nil || err2 != nil {
+						ltndLog.Errorf("failed to get ChainService().BestBlock(): %v", err1, err2)
+					} else if blockStamp != nil && blockStamp.Height == int32(tipHeight) {
+						lastHeaderTimestamp = tipHeader.Timestamp.Unix()
 					}
 				}
 
