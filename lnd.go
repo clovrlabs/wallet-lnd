@@ -837,6 +837,7 @@ func Main(cfg *Config, lisCfg ListenerCfg, shutdownChan <-chan struct{}, deps De
 
 				if neutrinoCS != nil {
 					blockStamp, err := neutrinoCS.BestBlock()
+					ltndLog.Infof("got best block: %v, error = %v", blockStamp, err)
 					if err != nil {
 						ltndLog.Errorf("failed to get ChainService().BestBlock(): %v", err)
 					} else if blockStamp != nil {
