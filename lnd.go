@@ -841,6 +841,7 @@ func Main(cfg *Config, lisCfg ListenerCfg, shutdownChan <-chan struct{}, deps De
 						ltndLog.Errorf("failed to get ChainService().BestBlock(): %v", err)
 					} else if blockStamp != nil {
 						lastHeaderTimestamp = blockStamp.Timestamp.Unix()
+						ltndLog.Infof("got lastHeaderTimestamp from neutrino: %v", lastHeaderTimestamp)
 					}
 				}
 
