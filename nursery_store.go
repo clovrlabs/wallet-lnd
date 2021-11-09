@@ -1237,8 +1237,9 @@ func (ns *nurseryStore) forEachHeightPrefix(tx kvdb.RTx, prefix []byte,
 		// outputs.
 		chanBucket := chanIndex.NestedReadBucket(chanBytes)
 		if chanBucket == nil {
-			return fmt.Errorf("unable to retrieve channel "+
-				"bucket: '%x'", chanBytes)
+			continue
+			// return fmt.Errorf("unable to retrieve channel "+
+			// 	"bucket: '%x'", chanBytes)
 		}
 
 		// Since all of the outputs of interest will start with the same
