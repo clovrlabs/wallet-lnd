@@ -29,6 +29,11 @@ type ProtocolOptions struct {
 	// opening or accepting channels having the script enforced commitment
 	// type for leased channel.
 	NoScriptEnforcedLease bool `long:"no-script-enforced-lease" description:"disable support for script enforced lease commitments"`
+
+	// ZeroConfChans should be set if we want to enable support for zero conf
+	// channels (channels that become operational before funding transaction
+	// was confirmed).
+	ZeroConfChans bool `long:"zero-conf-channels" description:"if set, then lnd will accept zero as minimum_depth in accept_channel message"`
 }
 
 // Wumbo returns true if lnd should permit the creation and acceptance of wumbo
@@ -47,4 +52,10 @@ func (l *ProtocolOptions) NoAnchorCommitments() bool {
 // script enforcement commitment type for leased channels.
 func (l *ProtocolOptions) NoScriptEnforcementLease() bool {
 	return l.NoScriptEnforcedLease
+}
+
+// ZeroConf returns true if lnd accepts zero confs channels.
+// channels.
+func (l *ProtocolOptions) ZeroConf() bool {
+	return l.ZeroConfChans
 }
