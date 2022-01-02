@@ -86,13 +86,12 @@ github.com/btcsuite/btclog v0.0.0-20170628155309-84c8d2346e9f/go.mod h1:TdznJufo
 github.com/btcsuite/btcutil v0.0.0-20190425235716-9e5f4b9a998d/go.mod h1:+5NJ2+qvTyV9exUAL/rxXi3DcLg2Ts+ymUAY5y4NvMg=
 github.com/btcsuite/btcutil v1.0.2/go.mod h1:j9HUFwoQRsZL3V4n+qG+CUnEGHOarIxfC3Le2Yhbcts=
 github.com/btcsuite/btcutil v1.0.3-0.20201208143702-a53e38424cce/go.mod h1:0DVlHczLPewLcPGEIeUEzfOJhqGPQ0mJJRDBtD307+o=
-github.com/btcsuite/btcutil v1.0.3-0.20210527170813-e2ba6805a890 h1:9aGy5p7oXRUB4MCTmWm0+jzuh79GpjPIfv1leA5POD4=
-github.com/btcsuite/btcutil v1.0.3-0.20210527170813-e2ba6805a890/go.mod h1:0DVlHczLPewLcPGEIeUEzfOJhqGPQ0mJJRDBtD307+o=
-github.com/btcsuite/btcutil/psbt v1.0.3-0.20201208143702-a53e38424cce/go.mod h1:LVveMu4VaNSkIRTZu2+ut0HDBRuYjqGocxDMNS1KuGQ=
-github.com/btcsuite/btcutil/psbt v1.0.3-0.20210527170813-e2ba6805a890 h1:0xUNvvwJ7RjzBs4nCF+YrK28S5P/b4uHkpPxY1ovGY4=
-github.com/btcsuite/btcutil/psbt v1.0.3-0.20210527170813-e2ba6805a890/go.mod h1:LVveMu4VaNSkIRTZu2+ut0HDBRuYjqGocxDMNS1KuGQ=
-github.com/btcsuite/btcwallet v0.13.0 h1:gtLWwueRm27KQiHJpycybv3uMdK1eo87JexfTfzvEhk=
-github.com/btcsuite/btcwallet v0.13.0/go.mod h1:iLN1lG1MW0eREm+SikmPO8AZPz5NglBTEK/ErqkjGpo=
+github.com/btcsuite/btcutil v1.0.3-0.20210929233259-9cdf59f60c51 h1:6XGSs4BMDRlNR9k+tpr1g2S6ZfQhKQl/Xr276yAEfP0=
+github.com/btcsuite/btcutil v1.0.3-0.20210929233259-9cdf59f60c51/go.mod h1:0DVlHczLPewLcPGEIeUEzfOJhqGPQ0mJJRDBtD307+o=
+github.com/btcsuite/btcutil/psbt v1.0.3-0.20210929233259-9cdf59f60c51 h1:NPiODiJszw7wgDeizXPaaZKrN3qFLOyNg+wPkbpAEhQ=
+github.com/btcsuite/btcutil/psbt v1.0.3-0.20210929233259-9cdf59f60c51/go.mod h1:LVveMu4VaNSkIRTZu2+ut0HDBRuYjqGocxDMNS1KuGQ=
+github.com/btcsuite/btcwallet v0.13.1-0.20211207003529-f275d2bfb90a h1:8EDY1/6RYW6I0UgHcntmytR5eT8jJxNX8xI9MHJNcaE=
+github.com/btcsuite/btcwallet v0.13.1-0.20211207003529-f275d2bfb90a/go.mod h1:7/c8fJFbj6iDMWgHzkeAzzuQbUeemeeZOtCEAkFqIhc=
 github.com/btcsuite/btcwallet/wallet/txauthor v1.0.0/go.mod h1:VufDts7bd/zs3GV13f/lXc/0lXrPnvxD/NvmpG/FEKU=
 github.com/btcsuite/btcwallet/wallet/txauthor v1.1.0 h1:8pO0pvPX1rFRfRiol4oV6kX7dY5y4chPwhfVwUfvwtk=
 github.com/btcsuite/btcwallet/wallet/txauthor v1.1.0/go.mod h1:ktYuJyumYtwG+QQ832Q+kqvxWJRAei3Nqs5qhSn4nww=
@@ -186,6 +185,7 @@ github.com/frankban/quicktest v1.2.2/go.mod h1:Qh/WofXFeiAFII1aEBu529AtJo6Zg2VHs
 github.com/fsnotify/fsnotify v1.4.7/go.mod h1:jwhsz4b93w/PPRr/qN1Yymfu8t87LnFCMoQvtojpjFo=
 github.com/getsentry/raven-go v0.2.0 h1:no+xWJRb5ZI7eE8TWgIq1jLulQiIoLG0IfYxv5JYMGs=
 github.com/getsentry/raven-go v0.2.0/go.mod h1:KungGk8q33+aIAZUIVWZDr2OfAEBsO49PX4NzFV5kcQ=
+github.com/ghodss/yaml v1.0.0 h1:wQHKEahhL6wmXdzwWG11gIVCkOv05bNOh+Rxn0yngAk=
 github.com/ghodss/yaml v1.0.0/go.mod h1:4dBDuWmgqj2HViK6kFavaiC9ZROes6MMH2rRYeMEF04=
 github.com/go-errors/errors v1.0.1 h1:LUHzmkK3GUKUrL/1gfBUxAHzcev3apQlezX/+O7ma6w=
 github.com/go-errors/errors v1.0.1/go.mod h1:f4zRHt4oKfwPJE5k8C9vpYG+aDHdBFUsgrm6/TyX73Q=
@@ -1040,6 +1040,8 @@ google.golang.org/grpc v1.36.0/go.mod h1:qjiiYl8FncCW8feJPdyg3v6XW24KsRHe+dy9BAG
 google.golang.org/grpc v1.37.0/go.mod h1:NREThFqKR1f3iQ6oBuvc5LadQuXVGo9rkm5ZGrQdJfM=
 google.golang.org/grpc v1.38.0 h1:/9BgsAsa5nWe26HqOlvlgJnqBuktYOLCgjCPqsa56W0=
 google.golang.org/grpc v1.38.0/go.mod h1:NREThFqKR1f3iQ6oBuvc5LadQuXVGo9rkm5ZGrQdJfM=
+google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.2.0 h1:TLkBREm4nIsEcexnCjgQd5GQWaHcqMzwQV0TX9pq8S0=
+google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.2.0/go.mod h1:DNq5QpG7LJqD2AamLZ7zvKE0DEpVl2BSEVjFycAAjRY=
 google.golang.org/protobuf v0.0.0-20200109180630-ec00e32a8dfd/go.mod h1:DFci5gLYBciE7Vtevhsrf46CRTquxDuWsQurQQe4oz8=
 google.golang.org/protobuf v0.0.0-20200221191635-4d8936d0db64/go.mod h1:kwYJMbMJ01Woi6D6+Kah6886xMZcty6N08ah7+eCXa0=
 google.golang.org/protobuf v0.0.0-20200228230310-ab0ca4ff8a60/go.mod h1:cfTl7dwQJ+fmap5saPgwCLgHXTUD7jkjRqWcaiX5VyM=
@@ -1053,6 +1055,8 @@ google.golang.org/protobuf v1.25.0/go.mod h1:9JNX74DMeImyA3h4bdi1ymwjUzf21/xIlba
 google.golang.org/protobuf v1.26.0-rc.1/go.mod h1:jlhhOSvTdKEhbULTjvd4ARK9grFBp09yW+WbY/TyQbw=
 google.golang.org/protobuf v1.26.0 h1:bxAC2xTBsZGibn2RTntX0oH50xLsqy1OxA9tTL3p/lk=
 google.golang.org/protobuf v1.26.0/go.mod h1:9q0QmTI4eRPtz6boOQmLYwt+qCgq0jsYwAQnmE0givc=
+google.golang.org/protobuf v1.27.1 h1:SnqbnDw1V7RiZcXPx5MEeqPv2s79L9i7BJUlG/+RurQ=
+google.golang.org/protobuf v1.27.1/go.mod h1:9q0QmTI4eRPtz6boOQmLYwt+qCgq0jsYwAQnmE0givc=
 gopkg.in/alecthomas/kingpin.v2 v2.2.6/go.mod h1:FMv+mEhP44yOT+4EoQTLFTRgOQ1FBLkstjWtayDeSgw=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
 gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
