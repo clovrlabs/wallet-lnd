@@ -200,14 +200,17 @@ func updateMpp(ctx *invoiceUpdateCtx,
 	}
 
 	htlcSet := inv.HTLCSet(setID, channeldb.HtlcStateAccepted)
-
+	hodlInvoice := inv.HodlInvoice || ctx.circuitKey.ChanID.IsFake()
 	// Check whether total amt matches other htlcs in the set.
 	var newSetTotal lnwire.MilliSatoshi
-	for _, htlc := range htlcSet {
+	for circuitKey, htlc := range htlcSet {
 		if ctx.mpp.TotalMsat() != htlc.MppTotalAmt {
 			return nil, ctx.failRes(ResultHtlcSetTotalMismatch), nil
 		}
 
+		if circuitKey.ChanID.IsFake() {
+			hodlInvoice = true
+		}
 		newSetTotal += htlc.Amt
 	}
 
@@ -249,7 +252,7 @@ func updateMpp(ctx *invoiceUpdateCtx,
 
 	// Check to see if we can settle or this is an hold invoice and
 	// we need to wait for the preimage.
-	if inv.HodlInvoice {
+	if hodlInvoice {
 		update.State = &channeldb.InvoiceStateUpdateDesc{
 			NewState: channeldb.ContractAccepted,
 			SetID:    setID,
@@ -444,7 +447,7 @@ func updateLegacy(ctx *invoiceUpdateCtx,
 
 	// Check to see if we can settle or this is an hold invoice and we need
 	// to wait for the preimage.
-	if inv.HodlInvoice {
+	if inv.HodlInvoice || ctx.circuitKey.ChanID.IsFake() {
 		update.State = &channeldb.InvoiceStateUpdateDesc{
 			NewState: channeldb.ContractAccepted,
 		}

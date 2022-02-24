@@ -1085,6 +1085,13 @@ func ValidateConfig(cfg Config, interceptor signal.Interceptor, fileParser,
 			return nil, mkErr("error validating litecoin: %v", err)
 		}
 
+		if cfg.Litecoin.SkipChannelConfirmation && cfg.Litecoin.DefaultNumChanConfs != 1 {
+			str := "%s: defaultchanconfs needs to be 1 if skip-channel-confirmation is enabled"
+			err := fmt.Errorf(str, funcName)
+			_, _ = fmt.Fprintln(os.Stderr, err)
+			return nil, err
+		}
+
 		// Multiple networks can't be selected simultaneously.  Count
 		// number of network flags passed; assign active network params
 		// while we're at it.
@@ -1171,6 +1178,13 @@ func ValidateConfig(cfg Config, interceptor signal.Interceptor, fileParser,
 		MaxFundingAmount = funding.MaxLtcFundingAmount
 
 	case cfg.Bitcoin.Active:
+		if cfg.Bitcoin.SkipChannelConfirmation && cfg.Bitcoin.DefaultNumChanConfs != 1 {
+			str := "%s: defaultchanconfs needs to be 1 if skip-channel-confirmation is enabled"
+			err := fmt.Errorf(str, funcName)
+			_, _ = fmt.Fprintln(os.Stderr, err)
+			return nil, err
+		}
+
 		// Multiple networks can't be selected simultaneously.  Count
 		// number of network flags passed; assign active network params
 		// while we're at it.
