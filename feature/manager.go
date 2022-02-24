@@ -27,6 +27,11 @@ type Config struct {
 	// NoScriptEnforcementLease unsets any bits signaling support for script
 	// enforced leases.
 	NoScriptEnforcementLease bool
+
+	// NoZeroConfChannels signals that this peer doesn't accept zero conf
+	// and will fail accept_channel response that contains minimum_depth
+	// as zero.
+	NoZeroConfChannels bool
 }
 
 // Manager is responsible for generating feature vectors for different requested
@@ -114,6 +119,11 @@ func newManager(cfg Config, desc setDesc) (*Manager, error) {
 		if cfg.NoScriptEnforcementLease {
 			raw.Unset(lnwire.ScriptEnforcedLeaseOptional)
 			raw.Unset(lnwire.ScriptEnforcedLeaseRequired)
+		}
+
+		if cfg.NoZeroConfChannels {
+			raw.Unset(lnwire.SkipFundingConfirmationOptional)
+			raw.Unset(lnwire.SkipFundingConfirmationRequired)
 		}
 
 		// Ensure that all of our feature sets properly set any

@@ -536,6 +536,7 @@ func newServer(cfg *Config, listenAddrs []net.Addr,
 		NoAnchors:                cfg.ProtocolOptions.NoAnchorCommitments(),
 		NoWumbo:                  !cfg.ProtocolOptions.Wumbo(),
 		NoScriptEnforcementLease: cfg.ProtocolOptions.NoScriptEnforcementLease(),
+		NoZeroConfChannels:       !cfg.ProtocolOptions.ZeroConf(),
 	})
 	if err != nil {
 		return nil, err
@@ -1159,6 +1160,7 @@ func newServer(cfg *Config, listenAddrs []net.Addr,
 	}
 
 	s.fundingMgr, err = funding.NewFundingManager(funding.Config{
+		HtlcNotifier:       s.htlcNotifier,
 		NoWumboChans:       !cfg.ProtocolOptions.Wumbo(),
 		IDKey:              nodeKeyDesc.PubKey,
 		IDKeyLoc:           nodeKeyDesc.KeyLocator,
@@ -1195,7 +1197,7 @@ func newServer(cfg *Config, listenAddrs []net.Addr,
 		DefaultRoutingPolicy: cc.RoutingPolicy,
 		DefaultMinHtlcIn:     cc.MinHtlcIn,
 		NumRequiredConfs: func(chanAmt btcutil.Amount,
-			pushAmt lnwire.MilliSatoshi) uint16 {
+			pushAmt lnwire.MilliSatoshi, allowZeroConfs bool) uint16 {
 			// For large channels we increase the number
 			// of confirmations we require for the
 			// channel to be considered open. As it is
@@ -1211,6 +1213,9 @@ func newServer(cfg *Config, listenAddrs []net.Addr,
 			// In case the user has explicitly specified
 			// a default value for the number of
 			// confirmations, we use it.
+			if chainCfg.SkipChannelConfirmation && allowZeroConfs {
+				return 0
+			}
 			defaultConf := uint16(chainCfg.DefaultNumChanConfs)
 			if defaultConf != 0 {
 				return defaultConf
