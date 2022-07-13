@@ -2150,7 +2150,7 @@ func (d *AuthenticatedGossiper) handleChanAnnouncement(nMsg *networkMsg,
 	// If the advertised inclusionary block is beyond our knowledge of the
 	// chain tip, then we'll ignore it for now.
 	d.Lock()
-	if nMsg.isRemote && d.isPremature(ann.ShortChannelID, 0, nMsg) {
+	if nMsg.isRemote && !ann.ShortChannelID.IsFake() && d.isPremature(ann.ShortChannelID, 0, nMsg) {
 		log.Warnf("Announcement for chan_id=(%v), is premature: "+
 			"advertises height %v, only height %v is known",
 			ann.ShortChannelID.ToUint64(),
@@ -2382,7 +2382,7 @@ func (d *AuthenticatedGossiper) handleChanUpdate(nMsg *networkMsg,
 	// chain tip, then we'll put the announcement in limbo to be fully
 	// verified once we advance forward in the chain.
 	d.Lock()
-	if nMsg.isRemote && d.isPremature(upd.ShortChannelID, 0, nMsg) {
+	if nMsg.isRemote && !upd.ShortChannelID.IsFake() && d.isPremature(upd.ShortChannelID, 0, nMsg) {
 		log.Warnf("Update announcement for short_chan_id(%v), is "+
 			"premature: advertises height %v, only height %v is "+
 			"known", shortChanID, blockHeight, d.bestHeight)
