@@ -31,6 +31,7 @@ type Chain struct {
 	TimeLockDelta           uint32              `long:"timelockdelta" description:"The CLTV delta we will subtract from a forwarded HTLC's timelock value"`
 	DNSSeeds                []string            `long:"dnsseed" description:"The seed DNS server(s) to use for initial peer discovery. Must be specified as a '<primary_dns>[,<soa_primary_dns>]' tuple where the SOA address is needed for DNS resolution through Tor but is optional for clearnet users. Multiple tuples can be specified, will overwrite the default seed servers."`
 	SkipChannelConfirmation bool                `long:"skip-channel-confirmation" description:"Whether or not to wait for a channel to confirm on-chain before making it operational"`
+	StartBeforeSynced       bool                `long:"startbeforesynced" description:"Don't wait for the chain to be synchronized to start lnd daemon"`
 }
 
 // Validate performs validation on our chain config.

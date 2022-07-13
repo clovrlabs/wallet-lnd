@@ -24,6 +24,7 @@ import (
 	"github.com/lightningnetwork/lnd/autopilot"
 	"github.com/lightningnetwork/lnd/build"
 	"github.com/lightningnetwork/lnd/cert"
+	"github.com/lightningnetwork/lnd/chainreg"
 	"github.com/lightningnetwork/lnd/chanacceptor"
 	"github.com/lightningnetwork/lnd/channeldb"
 	"github.com/lightningnetwork/lnd/keychain"
@@ -552,44 +553,45 @@ func Main(cfg *Config, lisCfg ListenerCfg, implCfg *ImplementationCfg,
 		return mkErr("error notifying ready: %v", err)
 	}
 
-	// We'll wait until we're fully synced to continue the start up of the
-	// remainder of the daemon. This ensures that we don't accept any
-	// possibly invalid state transitions, or accept channels with spent
-	// funds.
-	_, bestHeight, err := activeChainControl.ChainIO.GetBestBlock()
-	if err != nil {
-		return mkErr("unable to determine chain tip: %v", err)
-	}
-
-	ltndLog.Infof("Waiting for chain backend to finish sync, "+
-		"start_height=%v", bestHeight)
-
-	for {
-		if !interceptor.Alive() {
-			return nil
-		}
-
-		synced, _, err := activeChainControl.Wallet.IsSynced()
+	// If StartBeforeSynced is not set and we're not in regtest or simnet mode,
+	// we'll wait until we're fully synced to continue the start up of the
+	// remainder of the daemon. This ensures that we don't accept any possibly
+	// invalid state transitions, or accept channels with spent funds.
+	if !startBeforeSynced(cfg, cfg.registeredChains) {
+		_, bestHeight, err := activeChainControl.ChainIO.GetBestBlock()
 		if err != nil {
-			return mkErr("unable to determine if wallet is "+
-				"synced: %v", err)
+			return mkErr("unable to determine chain tip: %v", err)
 		}
 
-		if synced {
-			break
+		ltndLog.Infof("Waiting for chain backend to finish sync, "+
+			"start_height=%v", bestHeight)
+
+		for {
+			if !interceptor.Alive() {
+				return nil
+			}
+
+			synced, _, err := activeChainControl.Wallet.IsSynced()
+			if err != nil {
+				return mkErr("unable to determine if wallet is "+
+					"synced: %v", err)
+			}
+
+			if synced {
+				break
+			}
+
+			time.Sleep(time.Second * 1)
 		}
 
-		time.Sleep(time.Second * 1)
+		_, bestHeight, err = activeChainControl.ChainIO.GetBestBlock()
+		if err != nil {
+			return mkErr("unable to determine chain tip: %v", err)
+		}
+
+		ltndLog.Infof("Chain backend is fully synced (end_height=%v)!",
+			bestHeight)
 	}
-
-	_, bestHeight, err = activeChainControl.ChainIO.GetBestBlock()
-	if err != nil {
-		return mkErr("unable to determine chain tip: %v", err)
-	}
-
-	ltndLog.Infof("Chain backend is fully synced (end_height=%v)!",
-		bestHeight)
-
 	// With all the relevant chains initialized, we can finally start the
 	// server itself.
 	if err := server.Start(); err != nil {
@@ -620,6 +622,16 @@ func Main(cfg *Config, lisCfg ListenerCfg, implCfg *ImplementationCfg,
 	// the interrupt handler.
 	<-interceptor.ShutdownChannel()
 	return nil
+}
+
+func startBeforeSynced(cfg *Config, registeredChains *chainreg.ChainRegistry) bool {
+	switch registeredChains.PrimaryChain() {
+	case chainreg.BitcoinChain:
+		return cfg.Bitcoin.StartBeforeSynced || cfg.Bitcoin.RegTest || cfg.Bitcoin.SimNet
+	case chainreg.LitecoinChain:
+		return cfg.Litecoin.StartBeforeSynced || cfg.Litecoin.RegTest || cfg.Litecoin.SimNet
+	}
+	return false
 }
 
 // getTLSConfig returns a TLS configuration for the gRPC server and credentials
