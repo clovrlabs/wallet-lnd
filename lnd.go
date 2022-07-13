@@ -40,6 +40,7 @@ import (
 	"golang.org/x/crypto/acme/autocert"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/encoding/protojson"
 	"gopkg.in/macaroon-bakery.v2/bakery"
 	"gopkg.in/macaroon.v2"
@@ -907,6 +908,15 @@ func startGrpcListen(cfg *Config, grpcServer *grpc.Server,
 			wg.Done()
 			_ = grpcServer.Serve(lis)
 		}(lis)
+	}
+
+	if cfg.RPCMemListen {
+		memoryRPCListener = bufconn.Listen(100)
+
+		go func() {
+			rpcsLog.Infof("RPC server listening on %s", memoryRPCListener.Addr())
+			grpcServer.Serve(memoryRPCListener)
+		}()
 	}
 
 	// If Prometheus monitoring is enabled, start the Prometheus exporter.
