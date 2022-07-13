@@ -190,6 +190,15 @@ const (
 	//
 	// TODO: Decide on actual feature bit value.
 	ScriptEnforcedLeaseOptional FeatureBit = 2023
+	// SkipFundingConfirmationRequired is a required feature bit that signals that the node
+	// supports initiated channels to be made operational before funding transaction is
+	// confirmed on chain
+	SkipFundingConfirmationRequired FeatureBit = 1338
+
+	// SkipFundingConfirmationOptional is a required feature bit that signals that the node
+	// supports initiated channels to be made operational before funding transaction is
+	// confirmed on chain
+	SkipFundingConfirmationOptional FeatureBit = 1339
 
 	// maxAllowedSize is a maximum allowed size of feature vector.
 	//
@@ -213,37 +222,39 @@ func (b FeatureBit) IsRequired() bool {
 // feature bits must be assigned a name in this mapping, and feature bit pairs
 // must be assigned together for correct behavior.
 var Features = map[FeatureBit]string{
-	DataLossProtectRequired:       "data-loss-protect",
-	DataLossProtectOptional:       "data-loss-protect",
-	InitialRoutingSync:            "initial-routing-sync",
-	UpfrontShutdownScriptRequired: "upfront-shutdown-script",
-	UpfrontShutdownScriptOptional: "upfront-shutdown-script",
-	GossipQueriesRequired:         "gossip-queries",
-	GossipQueriesOptional:         "gossip-queries",
-	TLVOnionPayloadRequired:       "tlv-onion",
-	TLVOnionPayloadOptional:       "tlv-onion",
-	StaticRemoteKeyOptional:       "static-remote-key",
-	StaticRemoteKeyRequired:       "static-remote-key",
-	PaymentAddrOptional:           "payment-addr",
-	PaymentAddrRequired:           "payment-addr",
-	MPPOptional:                   "multi-path-payments",
-	MPPRequired:                   "multi-path-payments",
-	AnchorsRequired:               "anchor-commitments",
-	AnchorsOptional:               "anchor-commitments",
-	AnchorsZeroFeeHtlcTxRequired:  "anchors-zero-fee-htlc-tx",
-	AnchorsZeroFeeHtlcTxOptional:  "anchors-zero-fee-htlc-tx",
-	WumboChannelsRequired:         "wumbo-channels",
-	WumboChannelsOptional:         "wumbo-channels",
-	AMPRequired:                   "amp",
-	AMPOptional:                   "amp",
-	PaymentMetadataOptional:       "payment-metadata",
-	PaymentMetadataRequired:       "payment-metadata",
-	ExplicitChannelTypeOptional:   "explicit-commitment-type",
-	ExplicitChannelTypeRequired:   "explicit-commitment-type",
-	KeysendOptional:               "keysend",
-	KeysendRequired:               "keysend",
-	ScriptEnforcedLeaseRequired:   "script-enforced-lease",
-	ScriptEnforcedLeaseOptional:   "script-enforced-lease",
+	DataLossProtectRequired:         "data-loss-protect",
+	DataLossProtectOptional:         "data-loss-protect",
+	InitialRoutingSync:              "initial-routing-sync",
+	UpfrontShutdownScriptRequired:   "upfront-shutdown-script",
+	UpfrontShutdownScriptOptional:   "upfront-shutdown-script",
+	GossipQueriesRequired:           "gossip-queries",
+	GossipQueriesOptional:           "gossip-queries",
+	TLVOnionPayloadRequired:         "tlv-onion",
+	TLVOnionPayloadOptional:         "tlv-onion",
+	StaticRemoteKeyOptional:         "static-remote-key",
+	StaticRemoteKeyRequired:         "static-remote-key",
+	PaymentAddrOptional:             "payment-addr",
+	PaymentAddrRequired:             "payment-addr",
+	MPPOptional:                     "multi-path-payments",
+	MPPRequired:                     "multi-path-payments",
+	AnchorsRequired:                 "anchor-commitments",
+	AnchorsOptional:                 "anchor-commitments",
+	AnchorsZeroFeeHtlcTxRequired:    "anchors-zero-fee-htlc-tx",
+	AnchorsZeroFeeHtlcTxOptional:    "anchors-zero-fee-htlc-tx",
+	WumboChannelsRequired:           "wumbo-channels",
+	WumboChannelsOptional:           "wumbo-channels",
+	AMPRequired:                     "amp",
+	AMPOptional:                     "amp",
+	PaymentMetadataOptional:         "payment-metadata",
+	PaymentMetadataRequired:         "payment-metadata",
+	ExplicitChannelTypeOptional:     "explicit-commitment-type",
+	ExplicitChannelTypeRequired:     "explicit-commitment-type",
+	KeysendOptional:                 "keysend",
+	KeysendRequired:                 "keysend",
+	ScriptEnforcedLeaseRequired:     "script-enforced-lease",
+	ScriptEnforcedLeaseOptional:     "script-enforced-lease",
+	SkipFundingConfirmationOptional: "skip-funding-confirmation",
+	SkipFundingConfirmationRequired: "skip-funding-confirmation",
 }
 
 // RawFeatureVector represents a set of feature bits as defined in BOLT-09.  A
