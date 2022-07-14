@@ -1705,6 +1705,7 @@ func (c *Config) ImplementationConfig(
 			c.RemoteSigner.MigrateWatchOnly,
 		)
 		return &ImplementationCfg{
+			Deps:              deps,
 			GrpcRegistrar:     rpcImpl,
 			RestRegistrar:     rpcImpl,
 			ExternalValidator: rpcImpl,
@@ -1718,6 +1719,7 @@ func (c *Config) ImplementationConfig(
 
 	defaultImpl := NewDefaultWalletImpl(c, ltndLog, interceptor, false, deps)
 	return &ImplementationCfg{
+		Deps:                deps,
 		GrpcRegistrar:       defaultImpl,
 		RestRegistrar:       defaultImpl,
 		ExternalValidator:   defaultImpl,

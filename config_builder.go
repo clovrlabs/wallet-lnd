@@ -123,6 +123,7 @@ type Dependencies interface {
 // ImplementationCfg is a struct that holds all configuration items for
 // components that can be implemented outside lnd itself.
 type ImplementationCfg struct {
+	Deps Dependencies
 	// GrpcRegistrar is a type that can register additional gRPC subservers
 	// before the main gRPC server is started.
 	GrpcRegistrar

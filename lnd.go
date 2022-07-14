@@ -577,6 +577,18 @@ func Main(cfg *Config, lisCfg ListenerCfg, implCfg *ImplementationCfg,
 					"synced: %v", err)
 			}
 
+			if implCfg.Deps != nil && implCfg.Deps.ChainService() != nil {
+				blockStamp, err1 := implCfg.Deps.ChainService().BestBlock()
+				tipHeader, tipHeight, err2 := implCfg.Deps.ChainService().BlockHeaders.ChainTip()
+				ltndLog.Infof("got blockStamp: %v, error = %v", blockStamp, err1)
+				ltndLog.Infof("got tipHeight: %v, error = %v", tipHeight, err2)
+				if err1 != nil || err2 != nil {
+					ltndLog.Errorf("failed to get ChainService().BestBlock(): %v", err1, err2)
+				} else if blockStamp != nil && blockStamp.Height == int32(tipHeight) {
+					lastHeaderTimestamp = tipHeader.Timestamp.Unix()
+				}
+			}
+
 			// Check if we are instructed to wait only for headers to be synced
 			// with chain and skip waiting for the initial rescan.
 			if cfg.InitialHeadersSyncDelta > 0 {
