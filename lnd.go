@@ -571,10 +571,21 @@ func Main(cfg *Config, lisCfg ListenerCfg, implCfg *ImplementationCfg,
 				return nil
 			}
 
-			synced, _, err := activeChainControl.Wallet.IsSynced()
+			synced, lastHeaderTimestamp, err := activeChainControl.Wallet.IsSynced()
 			if err != nil {
 				return mkErr("unable to determine if wallet is "+
 					"synced: %v", err)
+			}
+
+			// Check if we are instructed to wait only for headers to be synced
+			// with chain and skip waiting for the initial rescan.
+			if cfg.InitialHeadersSyncDelta > 0 {
+				// We stop waiting if we are synched no less than than the
+				// required minimum.
+				minRequiredSyncTime := time.Now().Add(-cfg.InitialHeadersSyncDelta)
+				if time.Unix(lastHeaderTimestamp, 0).After(minRequiredSyncTime) {
+					break
+				}
 			}
 
 			if synced {
