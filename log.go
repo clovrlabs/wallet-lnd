@@ -43,6 +43,7 @@ import (
 	"github.com/lightningnetwork/lnd/routing"
 	"github.com/lightningnetwork/lnd/rpcperms"
 	"github.com/lightningnetwork/lnd/signal"
+	"github.com/lightningnetwork/lnd/submarineswap"
 	"github.com/lightningnetwork/lnd/sweep"
 	"github.com/lightningnetwork/lnd/tor"
 	"github.com/lightningnetwork/lnd/watchtower"
@@ -172,6 +173,7 @@ func SetupLoggers(root *build.RotatingLogWriter, interceptor signal.Interceptor)
 	AddSubLogger(root, btcwallet.Subsystem, interceptor, btcwallet.UseLogger)
 	AddSubLogger(root, rpcwallet.Subsystem, interceptor, rpcwallet.UseLogger)
 	AddSubLogger(root, peersrpc.Subsystem, interceptor, peersrpc.UseLogger)
+	AddSubLogger(root, "SUBS", interceptor, submarineswap.UseLogger)
 }
 
 // AddSubLogger is a helper method to conveniently create and register the
