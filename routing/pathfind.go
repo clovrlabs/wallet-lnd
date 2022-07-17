@@ -945,7 +945,7 @@ func findPath(g *graphParams, r *RestrictParams, cfg *PathFindingConfig,
 		pathEdges = append(pathEdges, currentNodeWithDist.nextHop)
 
 		if splitNeeded && currentNode != source {
-			log.Errorf("Removing fees - curentNode(dist): %v (%v) nextHop: %x", currentNodeWithDist.node.String(), currentNodeWithDist.dist, currentNodeWithDist.nextHop.Node.PubKeyBytes)
+			log.Errorf("Removing fees - curentNode(dist): %v (%v) nextHop: %v", currentNodeWithDist.node.String(), currentNodeWithDist.dist, currentNodeWithDist.nextHop.ToNodePubKey().String())
 			log.Errorf("Next hop channel id: %v, FeeBaseMSat: %v,  FeeProportionalMillionths: %v", (currentNodeWithDist.nextHop).ChannelID, (currentNodeWithDist.nextHop).FeeBaseMSat, (currentNodeWithDist.nextHop).FeeProportionalMillionths)
 			fees := (currentNodeWithDist.nextHop).ComputeFeeFromIncoming(amt)
 			log.Errorf("Removing fees - before: %v fee: %v after: %v", amt, fees, amt-fees)

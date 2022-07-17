@@ -9,12 +9,12 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/btcsuite/btcd/btcec"
+	"github.com/btcsuite/btcd/btcec/v2"
+	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
-	"github.com/btcsuite/btcutil"
 	"github.com/btcsuite/btcwallet/chain"
 	"github.com/btcsuite/btcwallet/waddrmgr"
 	"github.com/btcsuite/btcwallet/wallet/txrules"
@@ -22,13 +22,14 @@ import (
 	"github.com/btcsuite/btcwallet/wtxmgr"
 	"github.com/lightningnetwork/lnd/channeldb"
 	"github.com/lightningnetwork/lnd/input"
+	"github.com/lightningnetwork/lnd/kvdb"
 	"github.com/lightningnetwork/lnd/lnwallet"
 	"github.com/lightningnetwork/lnd/lnwallet/btcwallet"
 	"github.com/lightningnetwork/lnd/lnwallet/chainfee"
 )
 
 const (
-	defaultLockHeight      = 144
+	defaultLockHeight      = 288
 	redeemWitnessInputSize = 1 + 1 + 73 + 1 + 32 + 1 + 100
 	refundWitnessInputSize = 1 + 1 + 73 + 1 + 0 + 1 + 100
 )
@@ -58,7 +59,7 @@ func genSubmarineSwapScript(swapperPubKey, payerPubKey, hash []byte, lockHeight 
 	return builder.Script()
 }
 
-func saveSubmarineData(db *channeldb.DB, netID byte, address btcutil.Address, creationHeight, lockHeight int64, preimage, key, swapperPubKey, script []byte) error {
+func saveSubmarineData(c *channeldb.ChannelStateDB, netID byte, address btcutil.Address, creationHeight, lockHeight int64, preimage, key, swapperPubKey, script []byte) error {
 
 	if len(preimage) != 32 {
 		return errors.New("preimage not valid")
@@ -70,7 +71,7 @@ func saveSubmarineData(db *channeldb.DB, netID byte, address btcutil.Address, cr
 		return errors.New("swapperPubKey not valid")
 	}
 
-	return db.Update(func(tx walletdb.ReadWriteTx) error {
+	return kvdb.Update(c.GetParentDB(), func(tx walletdb.ReadWriteTx) error {
 		bucket, err := tx.CreateTopLevelBucket(submarineBucket)
 		if err != nil {
 			return err
@@ -109,8 +110,8 @@ func saveSubmarineData(db *channeldb.DB, netID byte, address btcutil.Address, cr
 	}, func() {})
 }
 
-func getSubmarineData(db *channeldb.DB, netID byte, address btcutil.Address) (creationHeight, lockHeight int64, preimage, key, swapperPubKey, script []byte, err error) {
-	err = db.View(func(tx walletdb.ReadTx) error {
+func getSubmarineData(c *channeldb.ChannelStateDB, netID byte, address btcutil.Address) (creationHeight, lockHeight int64, preimage, key, swapperPubKey, script []byte, err error) {
+	err = kvdb.View(c.GetParentDB(), func(tx walletdb.ReadTx) error {
 
 		bucket := tx.ReadBucket(submarineBucket)
 		if bucket == nil {
@@ -165,7 +166,7 @@ func getSubmarineData(db *channeldb.DB, netID byte, address btcutil.Address) (cr
 	return
 }
 
-func saveSwapperSubmarineData(db *channeldb.DB, netID byte, hash []byte, creationHeight, lockHeight int64, swapperKey []byte, script []byte) error {
+func saveSwapperSubmarineData(c *channeldb.ChannelStateDB, netID byte, hash []byte, creationHeight, lockHeight int64, swapperKey []byte, script []byte) error {
 
 	/**
 	key: swapper:<hash>
@@ -181,7 +182,7 @@ func saveSwapperSubmarineData(db *channeldb.DB, netID byte, hash []byte, creatio
 		return errors.New("swapperKey not valid")
 	}
 
-	return db.Update(func(tx walletdb.ReadWriteTx) error {
+	return kvdb.Update(c.GetParentDB(), func(tx walletdb.ReadWriteTx) error {
 		bucket, err := tx.CreateTopLevelBucket(submarineBucket)
 		if err != nil {
 			return err
@@ -222,9 +223,9 @@ func saveSwapperSubmarineData(db *channeldb.DB, netID byte, hash []byte, creatio
 	}, func() {})
 }
 
-func getSwapperSubmarineData(db *channeldb.DB, netID byte, hash []byte) (creationHeight, lockHeight int64, swapperKey, script []byte, err error) {
+func getSwapperSubmarineData(c *channeldb.ChannelStateDB, netID byte, hash []byte) (creationHeight, lockHeight int64, swapperKey, script []byte, err error) {
 
-	err = db.View(func(tx walletdb.ReadTx) error {
+	err = kvdb.View(c.GetParentDB(), func(tx walletdb.ReadTx) error {
 
 		bucket := tx.ReadBucket(submarineBucket)
 		if bucket == nil {
@@ -286,9 +287,9 @@ func newAddressWitnessScriptHash(script []byte, net *chaincfg.Params) (*btcutil.
 }
 
 // AddressFromHash
-func AddressFromHash(net *chaincfg.Params, db *channeldb.DB, hash []byte) (address btcutil.Address, creationHeight, lockHeight int64, err error) {
+func AddressFromHash(net *chaincfg.Params, c *channeldb.ChannelStateDB, hash []byte) (address btcutil.Address, creationHeight, lockHeight int64, err error) {
 	var script []byte
-	creationHeight, lockHeight, _, script, err = getSwapperSubmarineData(db, net.ScriptHashAddrID, hash)
+	creationHeight, lockHeight, _, script, err = getSwapperSubmarineData(c, net.ScriptHashAddrID, hash)
 	if err != nil {
 		return
 	}
@@ -297,8 +298,8 @@ func AddressFromHash(net *chaincfg.Params, db *channeldb.DB, hash []byte) (addre
 }
 
 // CreationHeight
-func CreationHeight(net *chaincfg.Params, db *channeldb.DB, address btcutil.Address) (creationHeight, lockHeight int64, err error) {
-	creationHeight, lockHeight, _, _, _, _, err = getSubmarineData(db, net.ScriptHashAddrID, address)
+func CreationHeight(net *chaincfg.Params, c *channeldb.ChannelStateDB, address btcutil.Address) (creationHeight, lockHeight int64, err error) {
+	creationHeight, lockHeight, _, _, _, _, err = getSubmarineData(c, net.ScriptHashAddrID, address)
 	return
 }
 
@@ -308,7 +309,7 @@ func SubmarineSwapInit() (preimage, hash, key, pubKey []byte, err error) {
 	h := sha256.Sum256(preimage)
 	hash = h[:]
 
-	k, err := btcec.NewPrivateKey(btcec.S256())
+	k, err := btcec.NewPrivateKey()
 	if err != nil {
 		return
 	}
@@ -317,7 +318,8 @@ func SubmarineSwapInit() (preimage, hash, key, pubKey []byte, err error) {
 	return
 }
 
-func NewSubmarineSwap(wdb walletdb.DB, manager *waddrmgr.Manager, net *chaincfg.Params, chainClient chain.Interface, db *channeldb.DB, pubKey, hash []byte) (address btcutil.Address, script, swapperPubKey []byte, lockHeight int64, err error) {
+func NewSubmarineSwap(wdb walletdb.DB, manager *waddrmgr.Manager, net *chaincfg.Params,
+	chainClient chain.Interface, c *channeldb.ChannelStateDB, pubKey, hash []byte) (address btcutil.Address, script, swapperPubKey []byte, lockHeight int64, err error) {
 
 	if len(pubKey) != btcec.PubKeyBytesLenCompressed {
 		err = errors.New("pubKey not valid")
@@ -330,14 +332,14 @@ func NewSubmarineSwap(wdb walletdb.DB, manager *waddrmgr.Manager, net *chaincfg.
 	}
 
 	//Need to check that the hash doesn't already exists in our db
-	_, _, _, _, errGet := getSwapperSubmarineData(db, net.ScriptHashAddrID, hash)
+	_, _, _, _, errGet := getSwapperSubmarineData(c, net.ScriptHashAddrID, hash)
 	if errGet == nil {
 		err = errors.New("Hash already exists")
 		return
 	}
 
 	//Create swapperKey and swapperPubKey
-	key, err := btcec.NewPrivateKey(btcec.S256())
+	key, err := btcec.NewPrivateKey()
 	if err != nil {
 		return
 	}
@@ -373,12 +375,13 @@ func NewSubmarineSwap(wdb walletdb.DB, manager *waddrmgr.Manager, net *chaincfg.
 		return
 	}
 	//Need to save the data keyed by hash
-	err = saveSwapperSubmarineData(db, net.ScriptHashAddrID, hash, int64(currentHeight), lockHeight, swapperKey, script)
+	err = saveSwapperSubmarineData(c, net.ScriptHashAddrID, hash, int64(currentHeight), lockHeight, swapperKey, script)
 
 	return
 }
 
-func WatchSubmarineSwap(wdb walletdb.DB, manager *waddrmgr.Manager, net *chaincfg.Params, chainClient chain.Interface, db *channeldb.DB,
+func WatchSubmarineSwap(wdb walletdb.DB, manager *waddrmgr.Manager, net *chaincfg.Params,
+	chainClient chain.Interface, c *channeldb.ChannelStateDB,
 	preimage, key, swapperPubKey []byte, lockHeight int64) (address btcutil.Address, script []byte, err error) {
 
 	currentHash, currentHeight, err := chainClient.GetBestBlock()
@@ -386,7 +389,7 @@ func WatchSubmarineSwap(wdb walletdb.DB, manager *waddrmgr.Manager, net *chaincf
 		return
 	}
 
-	_, pu := btcec.PrivKeyFromBytes(btcec.S256(), key)
+	_, pu := btcec.PrivKeyFromBytes(key)
 	hash := sha256.Sum256(preimage)
 	//Create the script
 	script, err = genSubmarineSwapScript(swapperPubKey, pu.SerializeCompressed(), hash[:], lockHeight)
@@ -411,7 +414,7 @@ func WatchSubmarineSwap(wdb walletdb.DB, manager *waddrmgr.Manager, net *chaincf
 		return
 	}
 
-	err = saveSubmarineData(db, net.ScriptHashAddrID, address, int64(currentHeight), lockHeight, preimage, key, swapperPubKey, script)
+	err = saveSubmarineData(c, net.ScriptHashAddrID, address, int64(currentHeight), lockHeight, preimage, key, swapperPubKey, script)
 	return
 }
 
@@ -440,7 +443,7 @@ func importScript(db walletdb.DB, manager *waddrmgr.Manager, net *chaincfg.Param
 			return err
 		}
 
-		addrInfo, err := bip44Mgr.ImportWitnessScript(addrmgrNs, script, bs)
+		addrInfo, err := bip44Mgr.ImportWitnessScript(addrmgrNs, script, bs, 0, false)
 		if err != nil {
 			if waddrmgr.IsError(err, waddrmgr.ErrDuplicateAddress) {
 				p2wshAddr, _ = newAddressWitnessScriptHash(script, net)
@@ -460,7 +463,6 @@ func GetUtxos(db walletdb.DB, txstore *wtxmgr.Store, net *chaincfg.Params, start
 	var txos []Utxo
 	outPoints := make(map[string]struct{})
 	spentOutPoints := make(map[string]struct{})
-	log.Infof("submarineswap GetUtxos started...")
 	err := walletdb.View(db, func(dbtx walletdb.ReadTx) error {
 		txmgrNs := dbtx.ReadBucket(wtxmgrNamespaceKey)
 		rangeFn := func(details []wtxmgr.TxDetails) (bool, error) {
@@ -492,7 +494,6 @@ func GetUtxos(db walletdb.DB, txstore *wtxmgr.Store, net *chaincfg.Params, start
 
 								continue
 							}
-
 							if addrs[0].String() == address {
 								h := d.MsgTx.TxHash()
 								op := wire.NewOutPoint(&h, uint32(i))
@@ -530,8 +531,8 @@ func GetUtxos(db walletdb.DB, txstore *wtxmgr.Store, net *chaincfg.Params, start
 	return utxos, nil
 }
 
-func RedeemFees(db *channeldb.DB, net *chaincfg.Params, wallet *lnwallet.LightningWallet, hash []byte, feePerKw chainfee.SatPerKWeight) (btcutil.Amount, error) {
-	creationHeight, _, _, script, err := getSwapperSubmarineData(db, net.ScriptHashAddrID, hash[:])
+func RedeemFees(c *channeldb.ChannelStateDB, net *chaincfg.Params, wallet *lnwallet.LightningWallet, hash []byte, feePerKw chainfee.SatPerKWeight) (btcutil.Amount, error) {
+	creationHeight, _, _, script, err := getSwapperSubmarineData(c, net.ScriptHashAddrID, hash[:])
 	if err != nil {
 		return 0, err
 	}
@@ -560,7 +561,7 @@ func RedeemFees(db *channeldb.DB, net *chaincfg.Params, wallet *lnwallet.Lightni
 	}
 
 	//Generate a random address
-	privateKey, err := btcec.NewPrivateKey(btcec.S256())
+	privateKey, err := btcec.NewPrivateKey()
 	if err != nil {
 		return 0, err
 	}
@@ -589,10 +590,10 @@ func RedeemFees(db *channeldb.DB, net *chaincfg.Params, wallet *lnwallet.Lightni
 }
 
 // Redeem
-func Redeem(db *channeldb.DB, net *chaincfg.Params, wallet *lnwallet.LightningWallet, preimage []byte, redeemAddress btcutil.Address, feePerKw chainfee.SatPerKWeight) (*wire.MsgTx, error) {
+func Redeem(c *channeldb.ChannelStateDB, net *chaincfg.Params, wallet *lnwallet.LightningWallet, preimage []byte, redeemAddress btcutil.Address, feePerKw chainfee.SatPerKWeight) (*wire.MsgTx, error) {
 
 	hash := sha256.Sum256(preimage)
-	creationHeight, _, serviceKey, script, err := getSwapperSubmarineData(db, net.ScriptHashAddrID, hash[:])
+	creationHeight, _, serviceKey, script, err := getSwapperSubmarineData(c, net.ScriptHashAddrID, hash[:])
 	if err != nil {
 		return nil, err
 	}
@@ -639,8 +640,8 @@ func Redeem(db *channeldb.DB, net *chaincfg.Params, wallet *lnwallet.LightningWa
 	// Adjust the amount in the txout
 	redeemTx.TxOut[0].Value = int64(amount - feePerKw.FeeForWeight(int64(weight)))
 
-	sigHashes := txscript.NewTxSigHashes(redeemTx)
-	privateKey, _ := btcec.PrivKeyFromBytes(btcec.S256(), serviceKey)
+	sigHashes := input.NewTxSigHashesV0Only(redeemTx)
+	privateKey, _ := btcec.PrivKeyFromBytes(serviceKey)
 	for idx := range redeemTx.TxIn {
 		scriptSig, err := txscript.RawTxInWitnessSignature(redeemTx, sigHashes, idx, int64(utxos[idx].Value), script, txscript.SigHashAll, privateKey)
 		if err != nil {
@@ -658,9 +659,9 @@ func Redeem(db *channeldb.DB, net *chaincfg.Params, wallet *lnwallet.LightningWa
 }
 
 // Refund
-func Refund(db *channeldb.DB, net *chaincfg.Params, wallet *lnwallet.LightningWallet, address, refundAddress btcutil.Address, feePerKw chainfee.SatPerKWeight) (*wire.MsgTx, error) {
+func Refund(c *channeldb.ChannelStateDB, net *chaincfg.Params, wallet *lnwallet.LightningWallet, address, refundAddress btcutil.Address, feePerKw chainfee.SatPerKWeight) (*wire.MsgTx, error) {
 
-	creationHeight, lockHeight, _, clientKey, _, script, err := getSubmarineData(db, net.ScriptHashAddrID, address)
+	creationHeight, lockHeight, _, clientKey, _, script, err := getSubmarineData(c, net.ScriptHashAddrID, address)
 	if err != nil {
 		return nil, err
 	}
@@ -708,15 +709,16 @@ func Refund(db *channeldb.DB, net *chaincfg.Params, wallet *lnwallet.LightningWa
 	weight := 4*refundTx.SerializeSizeStripped() + refundWitnessInputSize*len(refundTx.TxIn)
 	// Adjust the amount in the txout
 	refundTx.TxOut[0].Value = int64(amount - feePerKw.FeeForWeight(int64(weight)))
+
 	err = txrules.CheckOutput(
 		refundTx.TxOut[0], txrules.DefaultRelayFeePerKb,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("fees are to high for the given amount %v", err)
+		return nil, fmt.Errorf("fees are to high for the given amount %w", err)
 	}
 
-	sigHashes := txscript.NewTxSigHashes(refundTx)
-	privateKey, _ := btcec.PrivKeyFromBytes(btcec.S256(), clientKey)
+	sigHashes := input.NewTxSigHashesV0Only(refundTx)
+	privateKey, _ := btcec.PrivKeyFromBytes(clientKey)
 	for idx := range refundTx.TxIn {
 		scriptSig, err := txscript.RawTxInWitnessSignature(refundTx, sigHashes, idx, int64(utxos[idx].Value), script, txscript.SigHashAll, privateKey)
 		if err != nil {
