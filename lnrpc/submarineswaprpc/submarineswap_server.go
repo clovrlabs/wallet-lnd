@@ -1,3 +1,4 @@
+//go:build submarineswaprpc
 // +build submarineswaprpc
 
 package submarineswaprpc
@@ -9,8 +10,8 @@ import (
 	"path/filepath"
 	"sync/atomic"
 
-	"github.com/btcsuite/btcutil"
-	"github.com/grpc-ecosystem/grpc-gateway/runtime"
+	"github.com/btcsuite/btcd/btcutil"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/lightningnetwork/lnd/lnrpc"
 	"github.com/lightningnetwork/lnd/lnwallet"
 	"github.com/lightningnetwork/lnd/lnwallet/btcwallet"
@@ -96,10 +97,19 @@ func fileExists(name string) bool {
 	return true
 }
 
+type ServerShell struct {
+	SubmarineSwapperServer
+}
+
 // Server is a sub-server of the main RPC server.
 type Server struct {
 	started uint32
 	stopped uint32
+
+	// Required by the grpc-gateway/v2 library for forward compatibility.
+	// Must be after the atomically used variables to not break struct
+	// alignment.
+	UnimplementedSubmarineSwapperServer
 
 	cfg Config
 }
@@ -150,6 +160,63 @@ func New(cfg *Config) (*Server, lnrpc.MacaroonPerms, error) {
 	return &Server{
 		cfg: *cfg,
 	}, macPermissions, nil
+}
+
+// RegisterWithRootServer will be called by the root gRPC server to direct a
+// sub RPC server to register itself with the main gRPC root server. Until this
+// is called, each sub-server won't be able to have
+// requests routed towards it.
+//
+// NOTE: This is part of the lnrpc.GrpcHandler interface.
+func (r *ServerShell) RegisterWithRootServer(grpcServer *grpc.Server) error {
+	// We make sure that we register it with the main gRPC server to ensure
+	// all our methods are routed properly.
+	RegisterSubmarineSwapperServer(grpcServer, r)
+
+	log.Debugf("Signer RPC server successfully register with root gRPC " +
+		"server")
+
+	return nil
+}
+
+// RegisterWithRestServer will be called by the root REST mux to direct a sub
+// RPC server to register itself with the main REST mux server. Until this is
+// called, each sub-server won't be able to have requests routed towards it.
+//
+// NOTE: This is part of the lnrpc.GrpcHandler interface.
+func (r *ServerShell) RegisterWithRestServer(ctx context.Context,
+	mux *runtime.ServeMux, dest string, opts []grpc.DialOption) error {
+
+	// We make sure that we register it with the main REST server to ensure
+	// all our methods are routed properly.
+	err := RegisterSubmarineSwapperHandlerFromEndpoint(ctx, mux, dest, opts)
+	if err != nil {
+		log.Errorf("Could not register SubmarineSwapper REST server "+
+			"with root REST server: %v", err)
+		return err
+	}
+
+	log.Debugf("SubmarineSwapper REST server successfully registered with " +
+		"root REST server")
+	return nil
+}
+
+// CreateSubServer populates the subserver's dependencies using the passed
+// SubServerConfigDispatcher. This method should fully initialize the
+// sub-server instance, making it ready for action. It returns the macaroon
+// permissions that the sub-server wishes to pass on to the root server for all
+// methods routed towards it.
+//
+// NOTE: This is part of the lnrpc.GrpcHandler interface.
+func (r *ServerShell) CreateSubServer(configRegistry lnrpc.SubServerConfigDispatcher) (
+	lnrpc.SubServer, lnrpc.MacaroonPerms, error) {
+
+	subServer, macPermissions, err := createNewSubServer(configRegistry)
+	if err != nil {
+		return nil, nil, err
+	}
+	r.SubmarineSwapperServer = subServer
+	return subServer, macPermissions, nil
 }
 
 // Compile-time checks to ensure that Server fully implements the
@@ -341,7 +408,7 @@ func (s *Server) SubSwapServiceRedeemFees(ctx context.Context,
 func (s *Server) SubSwapServiceRedeem(ctx context.Context,
 	in *SubSwapServiceRedeemRequest) (*SubSwapServiceRedeemResponse, error) {
 
-	redeemAddress, err := s.cfg.Wallet.NewAddress(lnwallet.WitnessPubKey, false)
+	redeemAddress, err := s.cfg.Wallet.NewAddress(lnwallet.WitnessPubKey, false, lnwallet.DefaultAccountName)
 	if err != nil {
 		return nil, err
 	}

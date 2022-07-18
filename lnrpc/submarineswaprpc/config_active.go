@@ -1,3 +1,4 @@
+//go:build submarineswaprpc
 // +build submarineswaprpc
 
 package submarineswaprpc
