@@ -1,3 +1,4 @@
+//go:build breezbackuprpc
 // +build breezbackuprpc
 
 package breezbackuprpc
@@ -9,7 +10,7 @@ import (
 	"path/filepath"
 	"sync/atomic"
 
-	"github.com/grpc-ecosystem/grpc-gateway/runtime"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/lightningnetwork/lnd/breezbackup"
 	"github.com/lightningnetwork/lnd/lnrpc"
 	"github.com/lightningnetwork/lnd/macaroons"
@@ -59,10 +60,19 @@ func fileExists(name string) bool {
 	return true
 }
 
+type ServerShell struct {
+	BreezBackuperServer
+}
+
 // Server is a sub-server of the main RPC server.
 type Server struct {
 	started uint32
 	stopped uint32
+
+	// Required by the grpc-gateway/v2 library for forward compatibility.
+	// Must be after the atomically used variables to not break struct
+	// alignment.
+	UnimplementedBreezBackuperServer
 
 	cfg Config
 }
@@ -113,6 +123,52 @@ func New(cfg *Config) (*Server, lnrpc.MacaroonPerms, error) {
 	return &Server{
 		cfg: *cfg,
 	}, macPermissions, nil
+}
+
+// RegisterWithRootServer will be called by the root gRPC server to direct a
+// sub RPC server to register itself with the main gRPC root server. Until this
+// is called, each sub-server won't be able to have
+// requests routed towards it.
+//
+// NOTE: This is part of the lnrpc.GrpcHandler interface.
+func (r *ServerShell) RegisterWithRootServer(grpcServer *grpc.Server) error {
+	// We make sure that we register it with the main gRPC server to ensure
+	// all our methods are routed properly.
+	RegisterBreezBackuperServer(grpcServer, r)
+
+	log.Debugf("BackupRPC server successfully register with root gRPC " +
+		"server")
+
+	return nil
+}
+
+// RegisterWithRestServer will be called by the root REST mux to direct a sub
+// RPC server to register itself with the main REST mux server. Until this is
+// called, each sub-server won't be able to have requests routed towards it.
+//
+// NOTE: This is part of the lnrpc.GrpcHandler interface.
+func (r *ServerShell) RegisterWithRestServer(ctx context.Context,
+	mux *runtime.ServeMux, dest string, opts []grpc.DialOption) error {
+
+	return nil
+}
+
+// CreateSubServer populates the subserver's dependencies using the passed
+// SubServerConfigDispatcher. This method should fully initialize the
+// sub-server instance, making it ready for action. It returns the macaroon
+// permissions that the sub-server wishes to pass on to the root server for all
+// methods routed towards it.
+//
+// NOTE: This is part of the lnrpc.GrpcHandler interface.
+func (r *ServerShell) CreateSubServer(configRegistry lnrpc.SubServerConfigDispatcher) (
+	lnrpc.SubServer, lnrpc.MacaroonPerms, error) {
+
+	backServer, macPermissions, err := createNewSubServer(configRegistry)
+	if err != nil {
+		return nil, nil, err
+	}
+	r.BreezBackuperServer = backServer
+	return backServer, macPermissions, nil
 }
 
 // Compile-time checks to ensure that Server fully implements the
