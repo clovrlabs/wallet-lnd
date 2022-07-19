@@ -557,6 +557,10 @@ func Main(cfg *Config, lisCfg ListenerCfg, implCfg *ImplementationCfg,
 		return mkErr("error notifying ready: %v", err)
 	}
 
+	if implCfg.Deps != nil {
+		implCfg.Deps.ReadyChan() <- struct{}{}
+	}
+
 	// If StartBeforeSynced is not set and we're not in regtest or simnet mode,
 	// we'll wait until we're fully synced to continue the start up of the
 	// remainder of the daemon. This ensures that we don't accept any possibly

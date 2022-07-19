@@ -389,8 +389,9 @@ func (s *subRPCServerConfigs) PopulateDependencies(cfg *Config,
 			subCfgValue.FieldByName("MacService").Set(
 				reflect.ValueOf(macService),
 			)
+
 			subCfgValue.FieldByName("ChannelDB").Set(
-				reflect.ValueOf(cc.Wallet.Cfg.Database),
+				reflect.ValueOf(cc.Wallet.Cfg.Database.GetParentDB()),
 			)
 			subCfgValue.FieldByName("WalletDB").Set(
 				reflect.ValueOf(cc.Wallet.WalletController.(*btcwallet.BtcWallet).InternalWallet().Database()),
