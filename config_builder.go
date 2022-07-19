@@ -830,13 +830,12 @@ func (d *DefaultDatabaseBuilder) BuildDatabase(
 	}
 
 	startOpenTime := time.Now()
-
 	databaseBackends, err := cfg.DB.GetBackends(
 		ctx, cfg.graphDatabaseDir(), cfg.networkDir, filepath.Join(
 			cfg.Watchtower.TowerDir,
 			cfg.registeredChains.PrimaryChain().String(),
 			lncfg.NormalizeNetwork(cfg.ActiveNetParams.Name),
-		), cfg.WtClient.Active, cfg.Watchtower.Active,
+		), cfg.WtClient.Active, cfg.Watchtower.Active, d.chanDB.Backend,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("unable to obtain database "+
