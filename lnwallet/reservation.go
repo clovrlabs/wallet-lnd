@@ -9,6 +9,7 @@ import (
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
+	"github.com/google/martian/v3/log"
 	"github.com/lightningnetwork/lnd/channeldb"
 	"github.com/lightningnetwork/lnd/input"
 	"github.com/lightningnetwork/lnd/keychain"
@@ -524,6 +525,13 @@ func (r *ChannelReservation) validateReserveBounds() bool {
 
 	maxDustLimit := ourDustLimit
 	if maxDustLimit < theirDustLimit {
+		maxDustLimit = theirDustLimit
+	}
+
+	log.Errorf("our dust limit = %v, our required reserve = %v", ourDustLimit, ourRequiredReserve)
+
+	if ourDustLimit == 0 && ourRequiredReserve == 0 {
+		minChanReserve = theirRequiredReserve
 		maxDustLimit = theirDustLimit
 	}
 
