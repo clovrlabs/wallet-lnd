@@ -281,12 +281,13 @@ func RegisterSubmarineSwapperHandlerServer(ctx context.Context, mux *runtime.Ser
 		var stream runtime.ServerTransportStream
 		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
-		rctx, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/submarineswaprpc.SubmarineSwapper/SubSwapClientInit", runtime.WithHTTPPathPattern("/v2/submarineswapper/clientinit"))
+		var err error
+		ctx, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/submarineswaprpc.SubmarineSwapper/SubSwapClientInit", runtime.WithHTTPPathPattern("/v2/submarineswapper/clientinit"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
-		resp, md, err := local_request_SubmarineSwapper_SubSwapClientInit_0(rctx, inboundMarshaler, server, req, pathParams)
+		resp, md, err := local_request_SubmarineSwapper_SubSwapClientInit_0(ctx, inboundMarshaler, server, req, pathParams)
 		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
 		ctx = runtime.NewServerMetadataContext(ctx, md)
 		if err != nil {
@@ -304,12 +305,13 @@ func RegisterSubmarineSwapperHandlerServer(ctx context.Context, mux *runtime.Ser
 		var stream runtime.ServerTransportStream
 		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
-		rctx, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/submarineswaprpc.SubmarineSwapper/SubSwapServiceInit", runtime.WithHTTPPathPattern("/v2/submarineswapper/serviceinit"))
+		var err error
+		ctx, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/submarineswaprpc.SubmarineSwapper/SubSwapServiceInit", runtime.WithHTTPPathPattern("/v2/submarineswapper/serviceinit"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
-		resp, md, err := local_request_SubmarineSwapper_SubSwapServiceInit_0(rctx, inboundMarshaler, server, req, pathParams)
+		resp, md, err := local_request_SubmarineSwapper_SubSwapServiceInit_0(ctx, inboundMarshaler, server, req, pathParams)
 		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
 		ctx = runtime.NewServerMetadataContext(ctx, md)
 		if err != nil {
@@ -327,12 +329,13 @@ func RegisterSubmarineSwapperHandlerServer(ctx context.Context, mux *runtime.Ser
 		var stream runtime.ServerTransportStream
 		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
-		rctx, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/submarineswaprpc.SubmarineSwapper/SubSwapClientWatch", runtime.WithHTTPPathPattern("/v2/submarineswapper/clientwatch"))
+		var err error
+		ctx, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/submarineswaprpc.SubmarineSwapper/SubSwapClientWatch", runtime.WithHTTPPathPattern("/v2/submarineswapper/clientwatch"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
-		resp, md, err := local_request_SubmarineSwapper_SubSwapClientWatch_0(rctx, inboundMarshaler, server, req, pathParams)
+		resp, md, err := local_request_SubmarineSwapper_SubSwapClientWatch_0(ctx, inboundMarshaler, server, req, pathParams)
 		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
 		ctx = runtime.NewServerMetadataContext(ctx, md)
 		if err != nil {
@@ -350,12 +353,13 @@ func RegisterSubmarineSwapperHandlerServer(ctx context.Context, mux *runtime.Ser
 		var stream runtime.ServerTransportStream
 		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
-		rctx, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/submarineswaprpc.SubmarineSwapper/UnspentAmount", runtime.WithHTTPPathPattern("/v2/submarineswapper/unspentamount"))
+		var err error
+		ctx, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/submarineswaprpc.SubmarineSwapper/UnspentAmount", runtime.WithHTTPPathPattern("/v2/submarineswapper/unspentamount"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
-		resp, md, err := local_request_SubmarineSwapper_UnspentAmount_0(rctx, inboundMarshaler, server, req, pathParams)
+		resp, md, err := local_request_SubmarineSwapper_UnspentAmount_0(ctx, inboundMarshaler, server, req, pathParams)
 		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
 		ctx = runtime.NewServerMetadataContext(ctx, md)
 		if err != nil {
@@ -373,12 +377,13 @@ func RegisterSubmarineSwapperHandlerServer(ctx context.Context, mux *runtime.Ser
 		var stream runtime.ServerTransportStream
 		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
-		rctx, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/submarineswaprpc.SubmarineSwapper/SubSwapServiceRedeemFees", runtime.WithHTTPPathPattern("/v2/submarineswapper/redeemfees"))
+		var err error
+		ctx, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/submarineswaprpc.SubmarineSwapper/SubSwapServiceRedeemFees", runtime.WithHTTPPathPattern("/v2/submarineswapper/redeemfees"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
-		resp, md, err := local_request_SubmarineSwapper_SubSwapServiceRedeemFees_0(rctx, inboundMarshaler, server, req, pathParams)
+		resp, md, err := local_request_SubmarineSwapper_SubSwapServiceRedeemFees_0(ctx, inboundMarshaler, server, req, pathParams)
 		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
 		ctx = runtime.NewServerMetadataContext(ctx, md)
 		if err != nil {
@@ -396,12 +401,13 @@ func RegisterSubmarineSwapperHandlerServer(ctx context.Context, mux *runtime.Ser
 		var stream runtime.ServerTransportStream
 		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
-		rctx, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/submarineswaprpc.SubmarineSwapper/SubSwapServiceRedeem", runtime.WithHTTPPathPattern("/v2/submarineswapper/redeem"))
+		var err error
+		ctx, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/submarineswaprpc.SubmarineSwapper/SubSwapServiceRedeem", runtime.WithHTTPPathPattern("/v2/submarineswapper/redeem"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
-		resp, md, err := local_request_SubmarineSwapper_SubSwapServiceRedeem_0(rctx, inboundMarshaler, server, req, pathParams)
+		resp, md, err := local_request_SubmarineSwapper_SubSwapServiceRedeem_0(ctx, inboundMarshaler, server, req, pathParams)
 		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
 		ctx = runtime.NewServerMetadataContext(ctx, md)
 		if err != nil {
@@ -419,12 +425,13 @@ func RegisterSubmarineSwapperHandlerServer(ctx context.Context, mux *runtime.Ser
 		var stream runtime.ServerTransportStream
 		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
-		rctx, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/submarineswaprpc.SubmarineSwapper/SubSwapClientRefund", runtime.WithHTTPPathPattern("/v2/submarineswapper/refund"))
+		var err error
+		ctx, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/submarineswaprpc.SubmarineSwapper/SubSwapClientRefund", runtime.WithHTTPPathPattern("/v2/submarineswapper/refund"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
-		resp, md, err := local_request_SubmarineSwapper_SubSwapClientRefund_0(rctx, inboundMarshaler, server, req, pathParams)
+		resp, md, err := local_request_SubmarineSwapper_SubSwapClientRefund_0(ctx, inboundMarshaler, server, req, pathParams)
 		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
 		ctx = runtime.NewServerMetadataContext(ctx, md)
 		if err != nil {
@@ -481,12 +488,13 @@ func RegisterSubmarineSwapperHandlerClient(ctx context.Context, mux *runtime.Ser
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
-		rctx, err := runtime.AnnotateContext(ctx, mux, req, "/submarineswaprpc.SubmarineSwapper/SubSwapClientInit", runtime.WithHTTPPathPattern("/v2/submarineswapper/clientinit"))
+		var err error
+		ctx, err = runtime.AnnotateContext(ctx, mux, req, "/submarineswaprpc.SubmarineSwapper/SubSwapClientInit", runtime.WithHTTPPathPattern("/v2/submarineswapper/clientinit"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
-		resp, md, err := request_SubmarineSwapper_SubSwapClientInit_0(rctx, inboundMarshaler, client, req, pathParams)
+		resp, md, err := request_SubmarineSwapper_SubSwapClientInit_0(ctx, inboundMarshaler, client, req, pathParams)
 		ctx = runtime.NewServerMetadataContext(ctx, md)
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
@@ -501,12 +509,13 @@ func RegisterSubmarineSwapperHandlerClient(ctx context.Context, mux *runtime.Ser
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
-		rctx, err := runtime.AnnotateContext(ctx, mux, req, "/submarineswaprpc.SubmarineSwapper/SubSwapServiceInit", runtime.WithHTTPPathPattern("/v2/submarineswapper/serviceinit"))
+		var err error
+		ctx, err = runtime.AnnotateContext(ctx, mux, req, "/submarineswaprpc.SubmarineSwapper/SubSwapServiceInit", runtime.WithHTTPPathPattern("/v2/submarineswapper/serviceinit"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
-		resp, md, err := request_SubmarineSwapper_SubSwapServiceInit_0(rctx, inboundMarshaler, client, req, pathParams)
+		resp, md, err := request_SubmarineSwapper_SubSwapServiceInit_0(ctx, inboundMarshaler, client, req, pathParams)
 		ctx = runtime.NewServerMetadataContext(ctx, md)
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
@@ -521,12 +530,13 @@ func RegisterSubmarineSwapperHandlerClient(ctx context.Context, mux *runtime.Ser
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
-		rctx, err := runtime.AnnotateContext(ctx, mux, req, "/submarineswaprpc.SubmarineSwapper/SubSwapClientWatch", runtime.WithHTTPPathPattern("/v2/submarineswapper/clientwatch"))
+		var err error
+		ctx, err = runtime.AnnotateContext(ctx, mux, req, "/submarineswaprpc.SubmarineSwapper/SubSwapClientWatch", runtime.WithHTTPPathPattern("/v2/submarineswapper/clientwatch"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
-		resp, md, err := request_SubmarineSwapper_SubSwapClientWatch_0(rctx, inboundMarshaler, client, req, pathParams)
+		resp, md, err := request_SubmarineSwapper_SubSwapClientWatch_0(ctx, inboundMarshaler, client, req, pathParams)
 		ctx = runtime.NewServerMetadataContext(ctx, md)
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
@@ -541,12 +551,13 @@ func RegisterSubmarineSwapperHandlerClient(ctx context.Context, mux *runtime.Ser
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
-		rctx, err := runtime.AnnotateContext(ctx, mux, req, "/submarineswaprpc.SubmarineSwapper/UnspentAmount", runtime.WithHTTPPathPattern("/v2/submarineswapper/unspentamount"))
+		var err error
+		ctx, err = runtime.AnnotateContext(ctx, mux, req, "/submarineswaprpc.SubmarineSwapper/UnspentAmount", runtime.WithHTTPPathPattern("/v2/submarineswapper/unspentamount"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
-		resp, md, err := request_SubmarineSwapper_UnspentAmount_0(rctx, inboundMarshaler, client, req, pathParams)
+		resp, md, err := request_SubmarineSwapper_UnspentAmount_0(ctx, inboundMarshaler, client, req, pathParams)
 		ctx = runtime.NewServerMetadataContext(ctx, md)
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
@@ -561,12 +572,13 @@ func RegisterSubmarineSwapperHandlerClient(ctx context.Context, mux *runtime.Ser
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
-		rctx, err := runtime.AnnotateContext(ctx, mux, req, "/submarineswaprpc.SubmarineSwapper/SubSwapServiceRedeemFees", runtime.WithHTTPPathPattern("/v2/submarineswapper/redeemfees"))
+		var err error
+		ctx, err = runtime.AnnotateContext(ctx, mux, req, "/submarineswaprpc.SubmarineSwapper/SubSwapServiceRedeemFees", runtime.WithHTTPPathPattern("/v2/submarineswapper/redeemfees"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
-		resp, md, err := request_SubmarineSwapper_SubSwapServiceRedeemFees_0(rctx, inboundMarshaler, client, req, pathParams)
+		resp, md, err := request_SubmarineSwapper_SubSwapServiceRedeemFees_0(ctx, inboundMarshaler, client, req, pathParams)
 		ctx = runtime.NewServerMetadataContext(ctx, md)
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
@@ -581,12 +593,13 @@ func RegisterSubmarineSwapperHandlerClient(ctx context.Context, mux *runtime.Ser
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
-		rctx, err := runtime.AnnotateContext(ctx, mux, req, "/submarineswaprpc.SubmarineSwapper/SubSwapServiceRedeem", runtime.WithHTTPPathPattern("/v2/submarineswapper/redeem"))
+		var err error
+		ctx, err = runtime.AnnotateContext(ctx, mux, req, "/submarineswaprpc.SubmarineSwapper/SubSwapServiceRedeem", runtime.WithHTTPPathPattern("/v2/submarineswapper/redeem"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
-		resp, md, err := request_SubmarineSwapper_SubSwapServiceRedeem_0(rctx, inboundMarshaler, client, req, pathParams)
+		resp, md, err := request_SubmarineSwapper_SubSwapServiceRedeem_0(ctx, inboundMarshaler, client, req, pathParams)
 		ctx = runtime.NewServerMetadataContext(ctx, md)
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
@@ -601,12 +614,13 @@ func RegisterSubmarineSwapperHandlerClient(ctx context.Context, mux *runtime.Ser
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
-		rctx, err := runtime.AnnotateContext(ctx, mux, req, "/submarineswaprpc.SubmarineSwapper/SubSwapClientRefund", runtime.WithHTTPPathPattern("/v2/submarineswapper/refund"))
+		var err error
+		ctx, err = runtime.AnnotateContext(ctx, mux, req, "/submarineswaprpc.SubmarineSwapper/SubSwapClientRefund", runtime.WithHTTPPathPattern("/v2/submarineswapper/refund"))
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
-		resp, md, err := request_SubmarineSwapper_SubSwapClientRefund_0(rctx, inboundMarshaler, client, req, pathParams)
+		resp, md, err := request_SubmarineSwapper_SubSwapClientRefund_0(ctx, inboundMarshaler, client, req, pathParams)
 		ctx = runtime.NewServerMetadataContext(ctx, md)
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)

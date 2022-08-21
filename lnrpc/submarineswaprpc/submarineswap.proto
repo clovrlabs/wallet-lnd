@@ -93,7 +93,10 @@ message SubSwapClientRefundRequest {
 }
 message SubSwapClientRefundResponse {
     /// The txid of the transaction.
-    string txid = 1 [json_name = "txid"];
+    bytes tx = 1 [json_name = "tx"];
+
+    // the fees for the refund transaction in sats
+    int64 fees = 2 [json_name = "fees"];
 }
 
 service SubmarineSwapper {

@@ -4,7 +4,9 @@
 package submarineswaprpc
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -462,7 +464,7 @@ func (s *Server) SubSwapClientRefund(ctx context.Context,
 		return nil, err
 	}
 
-	tx, err := submarineswap.Refund(s.cfg.Wallet.Cfg.Database,
+	tx, fees, err := submarineswap.RefundTx(s.cfg.Wallet.Cfg.Database,
 		s.cfg.ActiveNetParams,
 		s.cfg.Wallet,
 		address,
@@ -474,5 +476,9 @@ func (s *Server) SubSwapClientRefund(ctx context.Context,
 		return nil, err
 	}
 	log.Infof("[subswapclientrefund] txid: %v", tx.TxHash().String())
-	return &SubSwapClientRefundResponse{Txid: tx.TxHash().String()}, nil
+	var buf bytes.Buffer
+	if err := tx.Serialize(&buf); err != nil {
+		return nil, fmt.Errorf("unable to serialize refund transaction: %v", err)
+	}
+	return &SubSwapClientRefundResponse{Tx: buf.Bytes(), Fees: int64(fees)}, nil
 }
