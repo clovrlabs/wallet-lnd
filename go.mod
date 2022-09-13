@@ -182,6 +182,11 @@ replace github.com/ulikunitz/xz => github.com/ulikunitz/xz v0.5.8
 // https://deps.dev/advisory/OSV/GO-2021-0053?from=%2Fgo%2Fgithub.com%252Fgogo%252Fprotobuf%2Fv1.3.1
 replace github.com/gogo/protobuf => github.com/gogo/protobuf v1.3.2
 
+//
+replace github.com/btcsuite/btcwallet => github.com/breez/btcwallet v0.16.8-breez
+
+replace github.com/btcsuite/btcwallet/walletdb => github.com/breez/btcwallet/walletdb v1.4.0-breez
+
 // If you change this please also update .github/pull_request_template.md and
 // docs/INSTALL.md.
 go 1.19
