@@ -60,7 +60,7 @@ require (
 	github.com/urfave/cli v1.20.0
 	go.etcd.io/etcd/client/pkg/v3 v3.5.0
 	go.etcd.io/etcd/client/v3 v3.5.0
-	go.starlark.net v0.0.0-20211203141949-70c0e40ae128 // indirect
+	go.starlark.net v0.0.0-20211203141949-70c0e40ae128
 	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519
 	golang.org/x/net v0.0.0-20210913180222-943fd674d43e
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
@@ -87,6 +87,8 @@ replace github.com/lightningnetwork/lnd/clock => ./clock
 replace github.com/lightningnetwork/lnd/healthcheck => ./healthcheck
 
 replace github.com/lightningnetwork/lnd/kvdb => ./kvdb
+
+replace github.com/btcsuite/btcd v0.22.0-beta.0.20211005184431-e3449998be39 => github.com/breez/btcd v0.0.0-20221010163258-a4adb2a7ba2a
 
 // This replace is for addressing the CVE https://github.com/advisories/GHSA-f6mq-5m25-4r72
 // This is a indirect dependency that cannot be upgraded directly.
