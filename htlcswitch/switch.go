@@ -2512,7 +2512,9 @@ func (s *Switch) getLinkByMapping(pkt *htlcPacket) (ChannelLink, error) {
 	// forward over it and this is a channel where the option-scid-alias
 	// feature bit was negotiated.
 	if link.IsUnadvertised() {
-		return nil, ErrChannelLinkNotFound
+		// We need to accept temporarily real SCID until the app
+		// put the alias in the routing hints.
+		// return nil, ErrChannelLinkNotFound
 	}
 
 	// The link is public so the confirmed SCID can be used to forward over
