@@ -3,6 +3,7 @@ package peer
 import (
 	"bytes"
 	"container/list"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
@@ -515,7 +516,7 @@ func (p *Brontide) Start() error {
 		p.cfg.Addr.IdentityKey,
 	)
 	if err != nil {
-		p.log.Errorf("Unable to fetch active chans "+
+		p.log.Errorf("node-debug: Unable to fetch active chans "+
 			"for peer: %v", err)
 		return err
 	}
@@ -594,7 +595,7 @@ func (p *Brontide) Start() error {
 
 	msgs, err := p.loadActiveChannels(activeChans)
 	if err != nil {
-		return fmt.Errorf("unable to load channels: %v", err)
+		return fmt.Errorf("node-debug: unable to load channels for peer: %v: %v", hex.EncodeToString(p.cfg.PubKeyBytes[:]), err)
 	}
 
 	p.startTime = time.Now()
@@ -748,6 +749,7 @@ func (p *Brontide) loadActiveChannels(chans []*channeldb.OpenChannel) (
 			p.cfg.Signer, dbChan, p.cfg.SigPool,
 		)
 		if err != nil {
+			p.log.Errorf("node-debug: failed to load lightning channel: %v: %v", dbChan.ShortChannelID, err)
 			return nil, err
 		}
 
@@ -762,7 +764,7 @@ func (p *Brontide) loadActiveChannels(chans []*channeldb.OpenChannel) (
 		if !dbChan.HasChanStatus(channeldb.ChanStatusDefault) &&
 			!dbChan.HasChanStatus(channeldb.ChanStatusRestored) {
 
-			p.log.Warnf("ChannelPoint(%v) has status %v, won't "+
+			p.log.Warnf("node-debug: ChannelPoint(%v) has status %v, won't "+
 				"start.", chanPoint, dbChan.ChanStatus())
 
 			// To help our peer recover from a potential data loss,
@@ -773,7 +775,7 @@ func (p *Brontide) loadActiveChannels(chans []*channeldb.OpenChannel) (
 			// marking the channel borked.
 			chanSync, err := dbChan.ChanSyncMsg()
 			if err != nil {
-				p.log.Errorf("Unable to create channel "+
+				p.log.Errorf("node-debug: Unable to create channel "+
 					"reestablish message for channel %v: "+
 					"%v", chanPoint, err)
 				continue
@@ -790,7 +792,7 @@ func (p *Brontide) loadActiveChannels(chans []*channeldb.OpenChannel) (
 
 				shutdownMsg, err := p.restartCoopClose(lnChan)
 				if err != nil {
-					p.log.Errorf("Unable to restart "+
+					p.log.Errorf("node-debug: Unable to restart "+
 						"coop close for channel: %v",
 						err)
 					continue
@@ -846,7 +848,7 @@ func (p *Brontide) loadActiveChannels(chans []*channeldb.OpenChannel) (
 				TimeLockDelta: uint32(selfPolicy.TimeLockDelta),
 			}
 		} else {
-			p.log.Warnf("Unable to find our forwarding policy "+
+			p.log.Warnf("node-debug: Unable to find our forwarding policy "+
 				"for channel %v, using default values",
 				chanPoint)
 			forwardingPolicy = &p.cfg.RoutingPolicy
@@ -882,7 +884,7 @@ func (p *Brontide) loadActiveChannels(chans []*channeldb.OpenChannel) (
 			true,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("unable to add link %v to "+
+			return nil, fmt.Errorf("node-debug: unable to add link %v to "+
 				"switch: %v", chanPoint, err)
 		}
 

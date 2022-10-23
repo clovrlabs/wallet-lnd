@@ -572,9 +572,14 @@ func (l *channelLink) WaitForShutdown() {
 // initiate new channel state. We also require that the short channel ID not be
 // the all-zero source ID, meaning that the channel has had its ID finalized.
 func (l *channelLink) EligibleToForward() bool {
-	return l.channel.RemoteNextRevocation() != nil &&
+	eligible := l.channel.RemoteNextRevocation() != nil &&
 		l.ShortChanID() != hop.Source &&
 		l.isReestablished()
+
+	if !eligible {
+		l.log.Errorf("node-debug: link is not eligible to forward short(%v) hop(%v) re-established(%v) , next_revocation(%v)", l.ShortChanID(), hop.Source, l.isReestablished(), l.channel.RemoteNextRevocation() != nil)
+	}
+	return eligible
 }
 
 // isReestablished returns true if the link has successfully completed the

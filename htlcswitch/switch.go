@@ -2,6 +2,7 @@ package htlcswitch
 
 import (
 	"bytes"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -864,7 +865,7 @@ func (s *Switch) getLocalLink(pkt *htlcPacket, htlc *lnwire.UpdateAddHTLC) (
 		// do that upon receiving the packet.
 		baseScid, ok := s.baseIndex[pkt.outgoingChanID]
 		if !ok {
-			log.Errorf("Link %v not found", pkt.outgoingChanID)
+			log.Errorf("node-debug: Link %v not found", pkt.outgoingChanID)
 			return nil, NewLinkError(&lnwire.FailUnknownNextPeer{})
 		}
 
@@ -872,7 +873,7 @@ func (s *Switch) getLocalLink(pkt *htlcPacket, htlc *lnwire.UpdateAddHTLC) (
 		// link.
 		link, err = s.getLinkByShortID(baseScid)
 		if err != nil {
-			log.Errorf("Link %v not found", baseScid)
+			log.Errorf("node-debug: Link %v not found", baseScid)
 			return nil, NewLinkError(&lnwire.FailUnknownNextPeer{})
 		}
 	}
@@ -1012,11 +1013,11 @@ func (s *Switch) extractResult(deobfuscator ErrorDecrypter, n *networkResult,
 
 // parseFailedPayment determines the appropriate failure message to return to
 // a user initiated payment. The three cases handled are:
-// 1) An unencrypted failure, which should already plaintext.
-// 2) A resolution from the chain arbitrator, which possibly has no failure
-//    reason attached.
-// 3) A failure from the remote party, which will need to be decrypted using
-//    the payment deobfuscator.
+//  1. An unencrypted failure, which should already plaintext.
+//  2. A resolution from the chain arbitrator, which possibly has no failure
+//     reason attached.
+//  3. A failure from the remote party, which will need to be decrypted using
+//     the payment deobfuscator.
 func (s *Switch) parseFailedPayment(deobfuscator ErrorDecrypter,
 	attemptID uint64, paymentHash lntypes.Hash, unencrypted,
 	isResolution bool, htlc *lnwire.UpdateFailHTLC) error {
@@ -1127,7 +1128,7 @@ func (s *Switch) handlePacketForward(packet *htlcPacket) error {
 		if err != nil {
 			s.indexMtx.RUnlock()
 
-			log.Debugf("unable to find link with "+
+			log.Errorf("node-debug: unable to find link with "+
 				"destination %v", packet.outgoingChanID)
 
 			// If packet was forwarded from another channel link
@@ -1158,6 +1159,7 @@ func (s *Switch) handlePacketForward(packet *htlcPacket) error {
 			// We'll skip any links that aren't yet eligible for
 			// forwarding.
 			if !link.EligibleToForward() {
+				log.Errorf("node-debug: link is not eligible to forward short(%v) id(%v) packet_id(%v)", link.ShortChanID(), link.ChanID(), packet.outgoingChanID)
 				failure = NewDetailedLinkError(
 					&lnwire.FailUnknownNextPeer{},
 					OutgoingFailureLinkNotEligible,
@@ -1190,6 +1192,7 @@ func (s *Switch) handlePacketForward(packet *htlcPacket) error {
 		// error, but ensure we send back the error sourced at the
 		// *target* link.
 		if len(destinations) == 0 {
+			log.Errorf("node-debug: zero destinations for packet_outgoing_id(%v)", packet.outgoingChanID)
 			// At this point, some or all of the links rejected the
 			// HTLC so we couldn't forward it. So we'll try to look
 			// up the error that came from the source.
@@ -1206,6 +1209,8 @@ func (s *Switch) handlePacketForward(packet *htlcPacket) error {
 					packet.outgoingChanID, newLogClosure(func() string {
 						return spew.Sdump(linkErrs)
 					}))
+			} else {
+				log.Errorf("node-debug: zero destinations for packet_outgoing_id(%v), error: %v", packet.outgoingChanID, linkErr)
 			}
 
 			log.Tracef("incoming HTLC(%x) violated "+
@@ -2457,6 +2462,7 @@ func (s *Switch) getLinkByMapping(pkt *htlcPacket) (ChannelLink, error) {
 		// baseIndex.
 		baseScid, ok := s.baseIndex[chanID]
 		if !ok {
+			log.Errorf("node-debug: unable to find link for alias %v", chanID)
 			// No mapping exists, bail.
 			return nil, ErrChannelLinkNotFound
 		}
@@ -2465,6 +2471,7 @@ func (s *Switch) getLinkByMapping(pkt *htlcPacket) (ChannelLink, error) {
 		// forwardingIndex.
 		link, ok := s.forwardingIndex[baseScid]
 		if !ok {
+			log.Errorf("node-debug: unable to find link for alias in forwardingIndex %v %v", chanID, baseScid)
 			// Link not found, bail.
 			return nil, ErrChannelLinkNotFound
 		}
@@ -2486,6 +2493,7 @@ func (s *Switch) getLinkByMapping(pkt *htlcPacket) (ChannelLink, error) {
 		// negotiated. We'll fetch the link and return it.
 		link, ok := s.forwardingIndex[chanID]
 		if !ok {
+			log.Errorf("node-debug: unable to find link in forwardingIndex %v", chanID)
 			// The link wasn't found, bail out.
 			return nil, ErrChannelLinkNotFound
 		}
@@ -2677,6 +2685,7 @@ func (s *Switch) GetLinksByInterface(hop [33]byte) ([]ChannelUpdateHandler,
 func (s *Switch) getLinks(destination [33]byte) ([]ChannelLink, error) {
 	links, ok := s.interfaceIndex[destination]
 	if !ok {
+		log.Errorf("node-debug: failed to find interfae links for destination %v", hex.EncodeToString(destination[:]))
 		return nil, ErrNoLinksFound
 	}
 
