@@ -1,0 +1,33 @@
+FROM golang:1.19-alpine as builder
+
+WORKDIR /build
+
+ADD . . 
+
+WORKDIR /build/cmd/lnd
+
+#LND build
+RUN go build -tags "experimental,invoicesrpc,signrpc,autopilotrpc,experimental,submarineswaprpc,chanreservedynamic,routerrpc,walletrpc,chainrpc" -o /build/lnd
+
+#LNCLI build
+WORKDIR /build/cmd/lncli
+
+RUN go build -tags "experimental,invoicesrpc,signrpc,autopilotrpc,experimental,submarineswaprpc,chanreservedynamic,routerrpc,walletrpc,chainrpc" -o /build/lncli
+
+FROM alpine:3
+
+# Copy the binaries from the builder image.
+COPY --from=builder /build/lncli /bin/
+COPY --from=builder /build/lnd /bin/
+COPY --from=builder /build/scripts/verify-install.sh /
+COPY --from=builder /build/scripts/keys/* /keys/
+
+# Store the SHA256 hash of the binaries that were just produced for later
+# verification.
+RUN sha256sum /bin/lnd /bin/lncli > /shasums.txt \
+    && cat /shasums.txt
+
+# Expose lnd ports (p2p, rpc).
+EXPOSE 9735 10009
+
+ENTRYPOINT [ "lnd" ]
